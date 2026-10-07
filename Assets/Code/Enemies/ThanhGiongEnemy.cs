@@ -888,11 +888,11 @@ public class ThanhGiongEnemy : MonoBehaviour
         gameObject.SetActive(alive && health > 0);
     }
 
-    public void TakeDamage(float amount, float stunSeconds = 0f, Vector3 hitSource = default)
+    public void TakeDamage(float amount, float stunSeconds = 0f, Vector3 hitSource = default, float impactScale = 1f, bool heavyImpact = false)
     {
         if (!gameObject.activeSelf || health <= 0f) return;
 
-        float actualDamage = amount;
+        float actualDamage = Mathf.Max(0f, amount);
 
         // VULNERABILITY WINDOW: Multiply damage by 2.0x if struck while weapon is stuck in ground!
         if (CurrentState == EnemyState.StuckInGround)
@@ -915,8 +915,12 @@ public class ThanhGiongEnemy : MonoBehaviour
             if (ragdoll != null)
             {
                 // Less knockback while stuck so boss doesn't slide away from his stuck weapon
-                float knockPower = CurrentState == EnemyState.StuckInGround ? 2.5f : (isBoss ? 6.5f : 13f);
-                ragdoll.ApplyKnockback(source, transform.position - source, knockPower, 1.4f);
+                float vulnerabilityDrag = CurrentState == EnemyState.StuckInGround ? 0.45f : 1f;
+                float damageRatio = Mathf.Sqrt(Mathf.Clamp01(actualDamage / Mathf.Max(1f, maxHealth)));
+                float baseKnockPower = isBoss ? 5.2f : 9.5f;
+                float knockPower = baseKnockPower * Mathf.Clamp(impactScale, 0.35f, 2.1f) * Mathf.Lerp(0.85f, 1.55f, damageRatio) * vulnerabilityDrag;
+                float lift = heavyImpact ? 1.65f : 1.18f;
+                ragdoll.ApplyKnockback(source, transform.position - source, knockPower, lift);
             }
             return;
         }
@@ -938,3 +942,4 @@ public class ThanhGiongEnemy : MonoBehaviour
         }
     }
 }
+

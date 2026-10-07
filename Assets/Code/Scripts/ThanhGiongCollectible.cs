@@ -13,6 +13,7 @@ public class ThanhGiongCollectible : MonoBehaviour
 
     private Vector3 baseVisualLocalPos;
     private float bobOffset;
+    private bool collected;
 
     private void Awake()
     {
@@ -27,6 +28,7 @@ public class ThanhGiongCollectible : MonoBehaviour
 
     private void Update()
     {
+        if (collected) return;
         if (visualRoot != null && visualRoot != transform)
         {
             visualRoot.Rotate(0f, spinSpeed * Time.deltaTime, 0f, Space.World);
@@ -46,6 +48,14 @@ public class ThanhGiongCollectible : MonoBehaviour
         }
     }
 
+    public void MarkCollected()
+    {
+        collected = true;
+        Collider[] colliders = GetComponentsInChildren<Collider>();
+        foreach (Collider c in colliders) c.enabled = false;
+        enabled = false;
+    }
+
     public Color GetAuraColor() => kind switch
     {
         Kind.Rice => new Color(1.0f, 0.88f, 0.25f, 0.95f),      // Gold
@@ -61,6 +71,9 @@ public class ThanhGiongCollectible : MonoBehaviour
         ThanhGiongCampaignController campaign = other.GetComponentInParent<ThanhGiongCampaignController>();
         if (campaign == null) campaign = FindAnyObjectByType<ThanhGiongCampaignController>();
         if (campaign == null || !campaign.TryCollect(this)) return;
+        MarkCollected();
         gameObject.SetActive(false);
     }
 }
+
+

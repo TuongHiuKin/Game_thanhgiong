@@ -91,6 +91,24 @@ public class ThanhGiongCampaignController : MonoBehaviour
     };
 
     private readonly Collider[] hits = new Collider[128];
+    private readonly Collider[] bambooProbeHits = new Collider[96];
+    private readonly List<ThanhGiongCollectible> runtimeBambooGroves = new List<ThanhGiongCollectible>();
+    private readonly HashSet<Transform> registeredBambooRoots = new HashSet<Transform>();
+    private const float BambooPickupRadius = 7.5f;
+    private const float BambooPickupColliderRadius = 2.35f;
+    private const float MinDamageFalloff = 0.72f;
+    private const float MaxKnockbackScale = 1.85f;
+
+    private readonly struct MeleeProfile
+    {
+        public readonly float BaseDamage, Radius, ForwardReach, Stun, Cooldown, AttackDuration, HeatPerEnemy, BaseKnockback, ArcDot;
+        public readonly bool Bamboo;
+        public MeleeProfile(bool bamboo, float baseDamage, float radius, float forwardReach, float stun, float cooldown, float attackDuration, float heatPerEnemy, float baseKnockback, float arcDot)
+        {
+            Bamboo = bamboo; BaseDamage = baseDamage; Radius = radius; ForwardReach = forwardReach; Stun = stun; Cooldown = cooldown; AttackDuration = attackDuration; HeatPerEnemy = heatPerEnemy; BaseKnockback = baseKnockback; ArcDot = arcDot;
+        }
+    }
+
     private MountedHorseController movement;
     private ThanhGiongCampaignAudio audioFx;
     private GodotMountedMotion mountedMotion;
@@ -129,6 +147,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (vfx == null) vfx = FindAnyObjectByType<ThanhGiongCampaignVFX>();
         if (hud == null) hud = FindAnyObjectByType<ThanhGiongCampaignHUD>();
         if (hud != null) hud.campaign = this;
+        RegisterSceneBambooGroves();
     }
 
     private void Start()
@@ -224,6 +243,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
                         enemy.Initialize(this, transform);
                 }
                 if (bambooRoot != null) bambooRoot.SetActive(true);
+                RegisterSceneBambooGroves();
                 ShowMessage("ĐÃ ĐI QUA CỔNG: BƯỚC VÀO MÀN 3 · TRẬN TUYẾN NÚI SÓC!", 3.5f);
                 break;
 
@@ -302,18 +322,19 @@ public class ThanhGiongCampaignController : MonoBehaviour
         {
             bambooQte++;
             audioFx?.PlayBambooPull();
-            IsometricCameraFollow.Instance?.Shake(0.35f, 0.6f);
+            vfx?.PlayFoodBurst(item.transform.position, item.GetAuraColor());
+            IsometricCameraFollow.Instance?.Shake(0.25f + bambooQte * 0.08f, 0.45f + bambooQte * 0.08f);
             if (bambooQte >= 3)
             {
                 CurrentWeapon = Weapon.Bamboo;
-                if (bambooRoot != null) bambooRoot.SetActive(false);
+                CollapsePulledBamboo(item);
                 vfx?.PlayBambooSweep(transform, 7.5f);
-                ShowMessage("NHỔ TRE THÀNH CÔNG! KHÓM TRE NGÀ QUÉT 360° SẴN SÀNG!", 3f);
+                ShowMessage("NHỔ TRE THÀNH CÔNG! BỤI TRE NGÀ ĐÃ THÀNH VŨ KHÍ — BỤI TRE NÀO CŨNG CÓ THỂ NHỔ!", 3f);
             }
             else
             {
                 item.gameObject.SetActive(true);
-                ShowMessage("DÙNG SỨC NHỔ TRE! NHẤN 'E' THÊM " + (3 - bambooQte) + " LẦN", 1.2f);
+                ShowMessage($"ĐANG NHỔ {BambooName(item)}! NHẤN 'E' THÊM {3 - bambooQte} LẦN", 1.2f);
             }
             return bambooQte >= 3;
         }
@@ -369,15 +390,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
         // Check picking up improvised weapons
         if (Input.GetKeyDown(KeyCode.E))
         {
-            if (CurrentWeapon == Weapon.None && bambooRoot != null && Vector3.Distance(transform.position, bambooRoot.transform.position) < 7f)
-            {
-                ThanhGiongCollectible bamboo = bambooRoot.GetComponentInChildren<ThanhGiongCollectible>(true);
-                if (bamboo != null) TryCollect(bamboo);
-            }
-            else if (CarriedWeapon == null)
-            {
-                TryPickUpImprovisedWeapon();
-            }
+            if (CurrentWeapon == Weapon.None && TryPullNearestBamboo()) return;
+            if (CarriedWeapon == null) TryPickUpImprovisedWeapon();
         }
 
         // Throw carried weapon
@@ -407,10 +421,196 @@ public class ThanhGiongCampaignController : MonoBehaviour
             if (enemy == null || enemy.HealthRatio <= 0 || !enemy.gameObject.activeInHierarchy) continue;
             if (chargeHits.TryGetValue(enemy, out float nextHit) && Time.time < nextHit) continue;
             chargeHits[enemy] = Time.time + 1f;
-            enemy.TakeDamage(12f, .7f, transform.position);
+            float chargeDamage = CalculateChargeDamage(enemy);
+            float chargeImpact = Mathf.Clamp(chargeDamage / 18f, 0.75f, 1.55f);
+            enemy.TakeDamage(chargeDamage, .65f, transform.position, chargeImpact, false);
             combatFeedback?.PlayImpact(enemy.transform, false);
             audioFx?.PlayImpact(false);
         }
+    }
+
+    private bool TryPullNearestBamboo()
+    {
+        ThanhGiongCollectible bamboo = FindNearestBambooPickup(BambooPickupRadius);
+        if (bamboo == null)
+        {
+            RegisterSceneBambooGroves();
+            bamboo = FindNearestBambooPickup(BambooPickupRadius);
+        }
+        if (bamboo == null)
+        {
+            ShowMessage("CHƯA THẤY BỤI TRE GẦN ĐÂY — LẠI SÁT TRE RỒI NHẤN E!", 1.1f);
+            return false;
+        }
+        TryCollect(bamboo);
+        return true;
+    }
+
+    private ThanhGiongCollectible FindNearestBambooPickup(float radius)
+    {
+        ThanhGiongCollectible best = null;
+        float bestSqr = radius * radius;
+        int count = Physics.OverlapSphereNonAlloc(transform.position + Vector3.up * .7f, radius, bambooProbeHits, ~0, QueryTriggerInteraction.Collide);
+        for (int i = 0; i < count; i++)
+        {
+            ThanhGiongCollectible item = bambooProbeHits[i].GetComponentInParent<ThanhGiongCollectible>();
+            if (item == null || item.kind != ThanhGiongCollectible.Kind.Bamboo || !item.gameObject.activeInHierarchy) continue;
+            float sqr = Vector3.ProjectOnPlane(item.transform.position - transform.position, Vector3.up).sqrMagnitude;
+            if (sqr < bestSqr) { bestSqr = sqr; best = item; }
+        }
+        foreach (ThanhGiongCollectible item in runtimeBambooGroves)
+        {
+            if (item == null || item.kind != ThanhGiongCollectible.Kind.Bamboo || !item.gameObject.activeInHierarchy) continue;
+            float sqr = Vector3.ProjectOnPlane(item.transform.position - transform.position, Vector3.up).sqrMagnitude;
+            if (sqr < bestSqr) { bestSqr = sqr; best = item; }
+        }
+        if (best != null && best.transform.root != transform.root) return best;
+        return null;
+    }
+
+    private void RegisterSceneBambooGroves()
+    {
+        runtimeBambooGroves.RemoveAll(item => item == null);
+        foreach (ThanhGiongCollectible item in FindObjectsByType<ThanhGiongCollectible>(FindObjectsInactive.Include))
+        {
+            if (item.kind != ThanhGiongCollectible.Kind.Bamboo) continue;
+            if (!runtimeBambooGroves.Contains(item)) runtimeBambooGroves.Add(item);
+            registeredBambooRoots.Add(item.transform);
+            EnsureBambooTrigger(item.gameObject);
+        }
+
+        foreach (Renderer renderer in FindObjectsByType<Renderer>(FindObjectsInactive.Exclude))
+        {
+            if (renderer == null || renderer is ParticleSystemRenderer || renderer is LineRenderer) continue;
+            Transform candidate = FindBambooCandidateRoot(renderer.transform);
+            if (candidate == null || candidate.root == transform.root || registeredBambooRoots.Contains(candidate)) continue;
+            ThanhGiongCollectible item = candidate.GetComponent<ThanhGiongCollectible>();
+            if (item == null) item = candidate.gameObject.AddComponent<ThanhGiongCollectible>();
+            item.kind = ThanhGiongCollectible.Kind.Bamboo;
+            item.displayName = "Bụi Tre Ngà";
+            item.foodValue = 0f;
+            item.spinSpeed = 0f;
+            item.visualRoot = candidate;
+            EnsureBambooTrigger(candidate.gameObject);
+            runtimeBambooGroves.Add(item);
+            registeredBambooRoots.Add(candidate);
+        }
+    }
+
+    private static Transform FindBambooCandidateRoot(Transform start)
+    {
+        Transform best = null;
+        for (Transform t = start; t != null; t = t.parent)
+        {
+            string path = BuildLowerPath(t);
+            if (!LooksLikeBamboo(path)) continue;
+            best = t;
+            if (t.GetComponent<ThanhGiongCollectible>() != null) return t;
+            if (t.parent == null || !LooksLikeBamboo(BuildLowerPath(t.parent))) return t;
+        }
+        return best;
+    }
+
+    private static string BuildLowerPath(Transform t)
+    {
+        string value = t.name.ToLowerInvariant();
+        Transform parent = t.parent;
+        int guard = 0;
+        while (parent != null && guard++ < 4)
+        {
+            value = parent.name.ToLowerInvariant() + "/" + value;
+            parent = parent.parent;
+        }
+        return value;
+    }
+
+    private static bool LooksLikeBamboo(string lowerPath)
+    {
+        return lowerPath.Contains("bamboo") || lowerPath.Contains("trenga") || lowerPath.Contains("luytre") || lowerPath.Contains("culm") || lowerPath.Contains("khóm tre") || lowerPath.Contains("khom tre") || lowerPath.Contains("tre ng") || lowerPath.Contains("/tre") || lowerPath.Contains("tre_") || lowerPath.EndsWith("tre");
+    }
+
+    private static void EnsureBambooTrigger(GameObject target)
+    {
+        SphereCollider trigger = null;
+        foreach (SphereCollider sphere in target.GetComponents<SphereCollider>())
+        {
+            if (sphere.isTrigger) { trigger = sphere; break; }
+        }
+        if (trigger == null)
+        {
+            trigger = target.AddComponent<SphereCollider>();
+            trigger.isTrigger = true;
+        }
+        trigger.radius = Mathf.Max(trigger.radius, BambooPickupColliderRadius);
+        trigger.center = Vector3.up * 1.2f;
+    }
+
+    private void CollapsePulledBamboo(ThanhGiongCollectible item)
+    {
+        if (item == null) return;
+        item.MarkCollected();
+        Transform visual = item.visualRoot != null ? item.visualRoot : item.transform;
+        StartCoroutine(PullBambooVisualDown(visual));
+    }
+
+    private IEnumerator PullBambooVisualDown(Transform visual)
+    {
+        if (visual == null) yield break;
+        Vector3 startPos = visual.localPosition;
+        Quaternion startRot = visual.localRotation;
+        Quaternion endRot = startRot * Quaternion.Euler(Random.Range(56f, 74f), Random.Range(-24f, 24f), Random.Range(-18f, 18f));
+        float elapsed = 0f;
+        while (elapsed < .35f && visual != null)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.Clamp01(elapsed / .35f);
+            float eased = t * t * (3f - 2f * t);
+            visual.localRotation = Quaternion.Slerp(startRot, endRot, eased);
+            visual.localPosition = startPos + Vector3.down * (.25f * eased);
+            yield return null;
+        }
+        if (visual != null) visual.gameObject.SetActive(false);
+    }
+
+    private static string BambooName(ThanhGiongCollectible item)
+    {
+        return item != null && !string.IsNullOrWhiteSpace(item.displayName) ? item.displayName.ToUpperInvariant() : "BỤI TRE NGÀ";
+    }
+
+    private MeleeProfile GetMeleeProfile(bool bamboo)
+    {
+        return bamboo
+            ? new MeleeProfile(true, 46f, 5.9f, 0f, 1.35f, .70f, .58f, 13f, 1.38f, -1f)
+            : new MeleeProfile(false, 28f, 3.45f, 2.15f, .22f, .38f, .32f, 8f, .82f, -.15f);
+    }
+
+    private float CalculateMeleeDamage(MeleeProfile profile, ThanhGiongEnemy enemy, float distance, float radius, int beat)
+    {
+        float growthFactor = 1f + GrowthPhase * 0.22f;
+        float comboFactor = beat == 3 ? 1.22f : beat == 2 ? 1.08f : 1f;
+        float speedFactor = 1f + Mathf.Clamp01((movement != null ? movement.PlanarSpeed : 0f) / Mathf.Max(1f, movement != null ? movement.runSpeed : 7f)) * (profile.Bamboo ? .18f : .12f);
+        float distanceFactor = Mathf.Lerp(1f, MinDamageFalloff, Mathf.Clamp01(distance / Mathf.Max(radius, .01f)));
+        float bossFactor = enemy != null && enemy.isBoss ? .86f : 1f;
+        return Mathf.Max(1f, profile.BaseDamage * growthFactor * comboFactor * speedFactor * distanceFactor * bossFactor);
+    }
+
+    private float CalculateImpactScale(MeleeProfile profile, float damage, ThanhGiongEnemy enemy, float distance, float radius, int beat)
+    {
+        float healthReference = enemy != null ? Mathf.Max(20f, enemy.maxHealth) : 75f;
+        float damageWeight = Mathf.Sqrt(Mathf.Clamp01(damage / healthReference));
+        float centerWeight = Mathf.Lerp(1.18f, .82f, Mathf.Clamp01(distance / Mathf.Max(radius, .01f)));
+        float comboWeight = beat == 3 ? 1.2f : 1f;
+        float bossWeight = enemy != null && enemy.isBoss ? .62f : 1f;
+        return Mathf.Clamp(profile.BaseKnockback * (.72f + damageWeight) * centerWeight * comboWeight * bossWeight, .45f, MaxKnockbackScale);
+    }
+
+    private float CalculateChargeDamage(ThanhGiongEnemy enemy)
+    {
+        float speed = movement != null ? movement.PlanarSpeed : 0f;
+        float speedFactor = Mathf.Clamp01((speed - 4.5f) / 5.5f);
+        float growthFactor = 1f + GrowthPhase * .16f;
+        float bossFactor = enemy != null && enemy.isBoss ? .62f : 1f;
+        return Mathf.Lerp(10f, 24f, speedFactor) * growthFactor * bossFactor;
     }
 
     private void TryPickUpImprovisedWeapon()
@@ -439,14 +639,15 @@ public class ThanhGiongCampaignController : MonoBehaviour
     {
         if (CurrentWeapon == Weapon.None || movement.IsDodging) return;
         bool bambooAttack = CurrentWeapon == Weapon.Bamboo;
+        MeleeProfile profile = GetMeleeProfile(bambooAttack);
         comboBeat=Time.time<=comboUntil?comboBeat%3+1:1;comboUntil=Time.time+1.1f;
-        nextAttackTime=Time.time+(bambooAttack?.68f:.38f);
-        movement.TriggerCampaignAttack(bambooAttack?.58f:.32f);
+        nextAttackTime=Time.time+profile.Cooldown;
+        movement.TriggerCampaignAttack(profile.AttackDuration);
         if(pendingStrike!=null)StopCoroutine(pendingStrike);
-        pendingStrike=StartCoroutine(ResolveMeleeStrike(bambooAttack,comboBeat));
+        pendingStrike=StartCoroutine(ResolveMeleeStrike(profile,comboBeat));
     }
 
-    private IEnumerator ResolveMeleeStrike(bool bambooAttack,int beat)
+    private IEnumerator ResolveMeleeStrike(MeleeProfile profile,int beat)
     {
         float windup=0;
         while(windup<.12f) {
@@ -458,10 +659,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
         CharacterController cc=GetComponent<CharacterController>();
         if(cc!=null&&cc.enabled&&cc.isGrounded)cc.Move(transform.forward*(beat==3?.5f:.3f));
         float growthMultiplier = 1f + GrowthPhase * 0.15f;
-        float radius = (bambooAttack ? 5.8f : 3.4f) * growthMultiplier;
-        float damage = (bambooAttack ? 52f : 36f) * (1f + GrowthPhase * 0.25f)*(beat==3?1.15f:1);
+        float radius = profile.Radius * growthMultiplier;
 
-        Vector3 center = bambooAttack ? transform.position : transform.position + transform.forward * 2.2f;
+        Vector3 center = profile.Bamboo ? transform.position : transform.position + transform.forward * profile.ForwardReach;
         int count = Physics.OverlapSphereNonAlloc(center, radius, hits, ~0, QueryTriggerInteraction.Ignore);
         int struck = 0;
         struckEnemies.Clear();
@@ -470,24 +670,28 @@ public class ThanhGiongCampaignController : MonoBehaviour
         {
             ThanhGiongEnemy enemy = hits[i].GetComponentInParent<ThanhGiongEnemy>();
             if (enemy == null || !enemy.gameObject.activeSelf || enemy.HealthRatio <= 0) continue;
-            if (!bambooAttack && Vector3.Dot(transform.forward, (enemy.transform.position - transform.position).normalized) < -.15f) continue;
+            Vector3 toEnemy = enemy.transform.position - transform.position;
+            Vector3 flatToEnemy = Vector3.ProjectOnPlane(toEnemy, Vector3.up);
+            if (!profile.Bamboo && flatToEnemy.sqrMagnitude > 0.01f && Vector3.Dot(transform.forward, flatToEnemy.normalized) < profile.ArcDot) continue;
             if (!struckEnemies.Add(enemy)) continue;
 
-            float stunSecs = bambooAttack ? 1.5f : 0.2f;
-            enemy.TakeDamage(damage, stunSecs, transform.position);
-            combatFeedback?.PlayImpact(enemy.transform, bambooAttack);
+            float damage = CalculateMeleeDamage(profile, enemy, flatToEnemy.magnitude, radius, beat);
+            float impactScale = CalculateImpactScale(profile, damage, enemy, flatToEnemy.magnitude, radius, beat);
+            enemy.TakeDamage(damage, profile.Stun, transform.position, impactScale, profile.Bamboo);
+            combatFeedback?.PlayImpact(enemy.transform, profile.Bamboo);
             struck++;
         }
 
         if (struck > 0)
         {
-            audioFx?.PlayImpact(bambooAttack);
-            Heat = Mathf.Min(maxHeat, Heat + struck * 10f);
-            IsometricCameraFollow.Instance?.Shake(0.2f, 0.35f);
+            audioFx?.PlayImpact(profile.Bamboo);
+            Heat = Mathf.Min(maxHeat, Heat + struck * profile.HeatPerEnemy);
+            float shake = Mathf.Clamp01(0.16f + struck * 0.07f + (profile.Bamboo ? 0.18f : 0f));
+            IsometricCameraFollow.Instance?.Shake(shake, profile.Bamboo ? 0.55f : 0.35f);
         }
 
-        combatFeedback?.PlayAttack(bambooAttack, radius);
-        if (bambooAttack)
+        combatFeedback?.PlayAttack(profile.Bamboo, radius);
+        if (profile.Bamboo)
         {
             vfx?.PlayBambooSweep(transform, radius);
             audioFx?.PlayBamboo();
@@ -533,7 +737,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
             IsometricCameraFollow.Instance?.Shake(0.9f, 1.2f);
 
             if (bambooRoot != null) bambooRoot.SetActive(true);
-            ShowMessage("RẮC! BỊ ĐAO MẺ CỦA TƯỚNG GIẶC ĐẬP GÃY GƯƠM — TÌM KHÓM TRE NGÀ PHÁT SÁNG ĐỂ NHỔ!", 4f);
+            RegisterSceneBambooGroves();
+            ShowMessage("RẮC! GƯƠM SẮT GÃY — ĐỨNG CẠNH BẤT KỲ BỤI TRE NÀO VÀ NHẤN E ĐỂ NHỔ TRE NGÀ!", 4f);
         }
 
         if (Kills >= victoryKills && CurrentWeapon == Weapon.Bamboo && !isTransitioning)
@@ -832,3 +1037,4 @@ public class ThanhGiongCampaignController : MonoBehaviour
         clearMessageRoutine = null;
     }
 }
+

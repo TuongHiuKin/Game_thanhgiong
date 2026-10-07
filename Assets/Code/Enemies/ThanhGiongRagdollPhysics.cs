@@ -9,6 +9,8 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
     public float defaultMass = 80f;
     public float drag = 0.8f;
     public float angularDrag = 2.0f;
+    public float maxImpactSpeed = 18f;
+    public float maxDeathLaunchSpeed = 24f;
 
     private Rigidbody rb;
     private Collider col;
@@ -55,9 +57,13 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
     {
         // Unfreeze constraints during impact to allow natural ragdoll tumble
         rb.constraints = RigidbodyConstraints.None;
-        Vector3 launchDir = ((transform.position - impactPoint).normalized + Vector3.up * upwardLift).normalized;
-        rb.linearVelocity = launchDir * force;
-        rb.AddTorque(Random.insideUnitSphere * (force * 3f), ForceMode.Impulse);
+        Vector3 flatAway = Vector3.ProjectOnPlane(transform.position - impactPoint, Vector3.up);
+        if (flatAway.sqrMagnitude < 0.01f) flatAway = Vector3.ProjectOnPlane(direction, Vector3.up);
+        if (flatAway.sqrMagnitude < 0.01f) flatAway = -transform.forward;
+        Vector3 launchDir = (flatAway.normalized + Vector3.up * Mathf.Clamp(upwardLift, 0.4f, 2.2f)).normalized;
+        float cappedForce = Mathf.Min(Mathf.Max(0f, force), maxImpactSpeed);
+        rb.linearVelocity = launchDir * cappedForce;
+        rb.AddTorque(Random.insideUnitSphere * (cappedForce * 2.2f), ForceMode.Impulse);
 
         yield return new WaitForSeconds(0.4f);
 
@@ -98,9 +104,10 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
         away.y = 0f;
         if (away.sqrMagnitude < 0.01f) away = -transform.forward;
 
-        Vector3 impulse = (away + Vector3.up * lift).normalized * force;
+        float cappedForce = Mathf.Min(Mathf.Max(0f, force), maxDeathLaunchSpeed);
+        Vector3 impulse = (away + Vector3.up * lift).normalized * cappedForce;
         rb.linearVelocity = impulse;
-        rb.AddTorque(Random.insideUnitSphere * (force * 3.5f), ForceMode.Impulse);
+        rb.AddTorque(Random.insideUnitSphere * (cappedForce * 2.8f), ForceMode.Impulse);
 
         // A short physical impact preserves hit weight, then every enemy dissolves
         // into rising golden ash instead of ending as a plain ragdoll.
@@ -126,3 +133,4 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
         isLaunched = false;
     }
 }
+
