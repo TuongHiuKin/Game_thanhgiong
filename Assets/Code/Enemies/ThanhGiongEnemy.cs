@@ -16,11 +16,21 @@ public class ThanhGiongEnemy : MonoBehaviour
         Dead
     }
 
+    public enum EnemyRole
+    {
+        Auto,
+        Spearman,
+        ShieldBearer,
+        Archer,
+        Raider
+    }
+
     [Header("Enemy Attributes")]
     public float maxHealth = 65f;
     public float moveSpeed = 2.75f;
     public float engageDistance = 80f;
     public bool isBoss;
+    public EnemyRole role = EnemyRole.Auto;
     public string enemyName = "Giáo Binh Ân";
 
     [Header("Heavy Slam & Vulnerability (Understory Mechanics)")]
@@ -63,6 +73,9 @@ public class ThanhGiongEnemy : MonoBehaviour
 
     private float nextHeavyAttackTime;
     private float nextMinionAttackTime;
+    private float nextRangedAttackTime;
+    private int lastBossPhase = 1;
+    private EnemyRole resolvedRole = EnemyRole.Spearman;
     private float stateTimer;
     private Vector3 slamTargetPos;
     private GameObject activeWarningRing;
@@ -90,6 +103,9 @@ public class ThanhGiongEnemy : MonoBehaviour
     private readonly Collider[] separationHits = new Collider[16];
 
     public Transform FocusTarget => focusTarget;
+    public EnemyRole ResolvedRole => isBoss ? EnemyRole.ShieldBearer : resolvedRole;
+    public int BossPhase => !isBoss ? 0 : HealthRatio > .66f ? 1 : HealthRatio > .33f ? 2 : 3;
+
 
     private void Awake()
     {
@@ -165,12 +181,15 @@ public class ThanhGiongEnemy : MonoBehaviour
         }
 
         ResolveIronHorseTarget();
+        ResolveCombatRole();
         health = maxHealth;
         stunnedUntil = 0f;
         rootedUntil = 0f;
         CurrentState = EnemyState.Idle;
         nextHeavyAttackTime = Time.time + Random.Range(1.5f, 3.0f);
         nextMinionAttackTime = Time.time + Random.Range(0.5f, 1.5f);
+        nextRangedAttackTime = Time.time + Random.Range(1.1f, 2.2f);
+        lastBossPhase = isBoss ? 1 : 0;
         smoothedPlanarVelocity = Vector3.zero;
         velocityDamp = Vector3.zero;
         visualSpeedBlend = 0f;
@@ -203,6 +222,7 @@ public class ThanhGiongEnemy : MonoBehaviour
         campaign = owner;
         target = player;
         ResolveIronHorseTarget();
+        ResolveCombatRole();
         gameObject.SetActive(true);
         CurrentState = EnemyState.Chasing;
     }
@@ -390,6 +410,94 @@ public class ThanhGiongEnemy : MonoBehaviour
         }
     }
 
+    private void ResolveCombatRole()
+    {
+        if (isBoss)
+        {
+            resolvedRole = EnemyRole.ShieldBearer;
+            return;
+        }
+
+        if (role != EnemyRole.Auto)
+        {
+            resolvedRole = role;
+        }
+        else
+        {
+            int slot = formationSlot >= 0 ? formationSlot : Mathf.Abs(GetEntityId().GetHashCode());
+            resolvedRole = (slot % 6) switch
+            {
+                0 => EnemyRole.ShieldBearer,
+                2 => EnemyRole.Archer,
+                4 => EnemyRole.Raider,
+                _ => EnemyRole.Spearman
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(enemyName) || enemyName == "Giáo Binh Ân" || enemyName.StartsWith("Giáo binh Ân"))
+        {
+            enemyName = resolvedRole switch
+            {
+                EnemyRole.ShieldBearer => "Khiên Binh Ân",
+                EnemyRole.Archer => "Cung Binh Ân",
+                EnemyRole.Raider => "Kỵ Tập Binh Ân",
+                _ => "Giáo Binh Ân"
+            };
+        }
+    }
+
+    private float RoleSpeedMultiplier() => resolvedRole switch
+    {
+        EnemyRole.ShieldBearer => .82f,
+        EnemyRole.Archer => .94f,
+        EnemyRole.Raider => 1.18f,
+        _ => 1f
+    };
+
+    private float RoleDamageMultiplier() => resolvedRole switch
+    {
+        EnemyRole.ShieldBearer => 1.16f,
+        EnemyRole.Archer => .82f,
+        EnemyRole.Raider => 1.05f,
+        _ => 1f
+    };
+
+    private float RoleCooldownMultiplier() => resolvedRole switch
+    {
+        EnemyRole.ShieldBearer => 1.18f,
+        EnemyRole.Archer => 1.35f,
+        EnemyRole.Raider => .78f,
+        _ => 1f
+    };
+
+    private float RoleRangeMultiplier() => resolvedRole switch
+    {
+        EnemyRole.ShieldBearer => .95f,
+        EnemyRole.Archer => 1.25f,
+        EnemyRole.Raider => 1.08f,
+        _ => 1f
+    };
+
+    private float BossPhaseMultiplier()
+    {
+        if (!isBoss) return 1f;
+        return BossPhase switch { 2 => 1.14f, 3 => 1.32f, _ => 1f };
+    }
+
+    private void AnnounceBossPhaseIfNeeded()
+    {
+        if (!isBoss || campaign == null || health <= 0f) return;
+        int phase = BossPhase;
+        if (phase <= lastBossPhase) return;
+        lastBossPhase = phase;
+        if (phase == 2)
+            campaign.ShowMessage("TƯỚNG GIẶC ÂN NỔI GIẬN! ĐÒN DẬM ĐẤT NHANH VÀ RỘNG HƠN!", 2.4f);
+        else if (phase == 3)
+            campaign.ShowMessage("PHASE CUỐI! TƯỚNG GIẶC LIỀU MẠNG — NÉ VÒNG ĐỎ RỒI PHẢN CÔNG NGAY!", 3.0f);
+        SpawnBladeSparks(transform.position + Vector3.up * 1.1f);
+        IsometricCameraFollow.Instance?.Shake(0.55f + phase * .08f, .55f);
+    }
+
     private void UpdateChasingMovement()
     {
         if (rb == null) return;
@@ -400,18 +508,28 @@ public class ThanhGiongEnemy : MonoBehaviour
         float attackSqrDist = attackDelta.sqrMagnitude;
 
         Vector3 desiredSlot = GetReachableFormationPoint(focusPosition);
+        if (!isBoss && resolvedRole == EnemyRole.Archer && formationOffset.sqrMagnitude > .01f)
+            desiredSlot = focusPosition + formationOffset.normalized * Mathf.Max(7.5f, surroundRadius + 3.5f);
         Vector3 delta = desiredSlot - rb.position;
         delta.y = 0f;
         float sqrDist = delta.sqrMagnitude;
 
         // Boss Heavy Slam trigger check
-        float attackRangeScale = campaign != null ? campaign.GetEnemyAttackRangeScale(isBoss) : 1f;
-        float heavyRange = heavyAttackRange * attackRangeScale;
+        float attackRangeScale = (campaign != null ? campaign.GetEnemyAttackRangeScale(isBoss) : 1f) * RoleRangeMultiplier();
+        float phaseMultiplier = BossPhaseMultiplier();
+        float heavyRange = heavyAttackRange * attackRangeScale * phaseMultiplier;
         float minionRange = 2.8f * attackRangeScale;
+        float archerRange = 12f * attackRangeScale;
 
         if (isBoss && Time.time >= nextHeavyAttackTime && attackSqrDist <= heavyRange * heavyRange)
         {
             StartCoroutine(PerformHeavySlamTelegraph());
+            return;
+        }
+
+        if (!isBoss && resolvedRole == EnemyRole.Archer && Time.time >= nextRangedAttackTime && attackSqrDist <= archerRange * archerRange && attackSqrDist > 3.4f * 3.4f)
+        {
+            StartCoroutine(PerformRangedVolley(archerRange));
             return;
         }
 
@@ -458,7 +576,7 @@ public class ThanhGiongEnemy : MonoBehaviour
         // Apply physical velocity
         float speedScale = campaign != null ? campaign.GetEnemySpeedScale(isBoss) : 1f;
         float catchUpMultiplier = attackSqrDist > engageDistance * engageDistance ? 1.32f : 1f;
-        Vector3 targetVelocity = direction * moveSpeed * speedScale * catchUpMultiplier;
+        Vector3 targetVelocity = direction * moveSpeed * speedScale * RoleSpeedMultiplier() * catchUpMultiplier;
         SmoothVelocity(targetVelocity);
 
         if (direction.sqrMagnitude > 0.001f)
@@ -550,7 +668,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
     private void SmoothVelocity(Vector3 targetVelocity)
     {
-        float speedScale = campaign != null ? campaign.GetEnemySpeedScale(isBoss) : 1f;
+        float speedScale = (campaign != null ? campaign.GetEnemySpeedScale(isBoss) : 1f) * RoleSpeedMultiplier();
         smoothedPlanarVelocity = Vector3.SmoothDamp(smoothedPlanarVelocity, targetVelocity, ref velocityDamp, locomotionSmoothTime, moveSpeed * speedScale * 4f, Time.fixedDeltaTime);
         rb.linearVelocity = new Vector3(smoothedPlanarVelocity.x, rb.linearVelocity.y, smoothedPlanarVelocity.z);
     }
@@ -572,10 +690,11 @@ public class ThanhGiongEnemy : MonoBehaviour
         // Spawn glowing red telegraph warning ring on ground
         float pressure = campaign != null ? campaign.BattlePressure01 : 0f;
         float cooldownScale = campaign != null ? campaign.GetEnemyCooldownScale(true) : 1f;
-        float damageScale = campaign != null ? campaign.GetEnemyDamageScale(true) : 1f;
-        float effectiveTelegraph = Mathf.Max(.42f, telegraphDuration * Mathf.Lerp(1f, .78f, pressure));
-        float effectiveSlamRadius = slamRadius * Mathf.Lerp(1f, 1.14f, pressure);
-        float effectiveStuckDuration = Mathf.Max(.55f, stuckDuration * Mathf.Lerp(1f, .74f, pressure));
+        float damageScale = (campaign != null ? campaign.GetEnemyDamageScale(true) : 1f) * BossPhaseMultiplier();
+        float phase = BossPhase - 1f;
+        float effectiveTelegraph = Mathf.Max(.34f, telegraphDuration * Mathf.Lerp(1f, .78f, pressure) * Mathf.Lerp(1f, .82f, Mathf.Clamp01(phase / 2f)));
+        float effectiveSlamRadius = slamRadius * Mathf.Lerp(1f, 1.14f, pressure) * Mathf.Lerp(1f, 1.18f, Mathf.Clamp01(phase / 2f));
+        float effectiveStuckDuration = Mathf.Max(.45f, stuckDuration * Mathf.Lerp(1f, .74f, pressure) * Mathf.Lerp(1f, .78f, Mathf.Clamp01(phase / 2f)));
 
         SpawnWarningRing(slamTargetPos, effectiveSlamRadius);
 
@@ -622,6 +741,10 @@ public class ThanhGiongEnemy : MonoBehaviour
         slamOffset.y = 0;
         float distanceToPlayer = slamOffset.magnitude;
         bool hitPlayer = distanceToPlayer <= effectiveSlamRadius;
+        if (BossPhase >= 3)
+        {
+            SpawnGroundImpact(slamTargetPos, effectiveSlamRadius * 1.28f);
+        }
 
         if (hitPlayer)
         {
@@ -639,7 +762,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
             yield return new WaitForSeconds(0.4f);
             ResetVisualPose();
-            nextHeavyAttackTime = Time.time + heavyAttackCooldown * cooldownScale;
+            nextHeavyAttackTime = Time.time + heavyAttackCooldown * cooldownScale / BossPhaseMultiplier();
             CurrentState = EnemyState.Chasing;
         }
         else
@@ -668,7 +791,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
                 yield return new WaitForSeconds(0.45f);
                 ResetVisualPose();
-                nextHeavyAttackTime = Time.time + heavyAttackCooldown * cooldownScale;
+                nextHeavyAttackTime = Time.time + heavyAttackCooldown * cooldownScale / BossPhaseMultiplier();
                 CurrentState = EnemyState.Chasing;
             }
         }
@@ -676,9 +799,9 @@ public class ThanhGiongEnemy : MonoBehaviour
 
     private IEnumerator PerformMinionThrust()
     {
-        float cooldownScale = campaign != null ? campaign.GetEnemyCooldownScale(false) : 1f;
-        float damageScale = campaign != null ? campaign.GetEnemyDamageScale(false) : 1f;
-        float rangeScale = campaign != null ? campaign.GetEnemyAttackRangeScale(false) : 1f;
+        float cooldownScale = (campaign != null ? campaign.GetEnemyCooldownScale(false) : 1f) * RoleCooldownMultiplier();
+        float damageScale = (campaign != null ? campaign.GetEnemyDamageScale(false) : 1f) * RoleDamageMultiplier();
+        float rangeScale = (campaign != null ? campaign.GetEnemyAttackRangeScale(false) : 1f) * RoleRangeMultiplier();
         float pressure = campaign != null ? campaign.BattlePressure01 : 0f;
         nextMinionAttackTime = Time.time + minionAttackInterval * cooldownScale;
         CurrentState = EnemyState.TelegraphingAttack;
@@ -696,6 +819,34 @@ public class ThanhGiongEnemy : MonoBehaviour
         if (health > 0f && Time.time >= stunnedUntil && target != null && campaign != null &&
             campaign.IsBattleActive && Vector3.Distance(target.position, transform.position) < 3f * rangeScale)
             campaign.DamagePlayer(8f * damageScale, transform.position);
+        ResetVisualPose();
+        if (health > 0f && Time.time >= stunnedUntil) CurrentState = EnemyState.Chasing;
+    }
+
+    private IEnumerator PerformRangedVolley(float archerRange)
+    {
+        float cooldownScale = (campaign != null ? campaign.GetEnemyCooldownScale(false) : 1f) * RoleCooldownMultiplier();
+        float damageScale = (campaign != null ? campaign.GetEnemyDamageScale(false) : 1f) * RoleDamageMultiplier();
+        float pressure = campaign != null ? campaign.BattlePressure01 : 0f;
+        nextRangedAttackTime = Time.time + Mathf.Lerp(2.4f, 1.55f, pressure) * cooldownScale;
+        CurrentState = EnemyState.TelegraphingAttack;
+        if (rb != null) SmoothVelocity(Vector3.zero);
+
+        Vector3 origin = transform.position + Vector3.up * (isBoss ? 1.8f : 1.25f);
+        Vector3 aim = focusTarget != null ? focusTarget.position + Vector3.up * .9f : origin + transform.forward * archerRange;
+        Vector3 faceDir = aim - transform.position;
+        faceDir.y = 0f;
+        if (faceDir.sqrMagnitude > .01f) transform.rotation = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
+        SpawnRangedTracer(origin, aim, new Color(1f, .74f, .18f, .95f), .34f);
+
+        yield return new WaitForSeconds(Mathf.Lerp(.34f, .22f, pressure));
+        if (health > 0f && Time.time >= stunnedUntil && target != null && campaign != null && campaign.IsBattleActive)
+        {
+            Vector3 toTarget = target.position - transform.position;
+            toTarget.y = 0f;
+            if (toTarget.sqrMagnitude <= archerRange * archerRange)
+                campaign.DamagePlayer(6.5f * damageScale, transform.position);
+        }
         ResetVisualPose();
         if (health > 0f && Time.time >= stunnedUntil) CurrentState = EnemyState.Chasing;
     }
@@ -815,6 +966,22 @@ public class ThanhGiongEnemy : MonoBehaviour
         StartCoroutine(FadeOutImpact(impact, line, 0.45f));
     }
 
+    private void SpawnRangedTracer(Vector3 start, Vector3 end, Color color, float life)
+    {
+        GameObject tracer = new GameObject("EnemyArrowTelegraph");
+        LineRenderer line = tracer.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = 2;
+        line.startWidth = .06f;
+        line.endWidth = .015f;
+        line.material = new Material(Shader.Find("Sprites/Default"));
+        line.startColor = color;
+        line.endColor = new Color(color.r, color.g, color.b, 0f);
+        line.SetPosition(0, start);
+        line.SetPosition(1, end);
+        Destroy(tracer, life);
+    }
+
     private void SpawnBladeSparks(Vector3 point)
     {
         GameObject sparks = new GameObject("BladeSparks");
@@ -910,6 +1077,8 @@ public class ThanhGiongEnemy : MonoBehaviour
         if (!gameObject.activeSelf || health <= 0f) return;
 
         float actualDamage = Mathf.Max(0f, amount);
+        if (!isBoss && resolvedRole == EnemyRole.ShieldBearer)
+            actualDamage *= heavyImpact ? .85f : .68f;
 
         // VULNERABILITY WINDOW: Multiply damage by 2.0x if struck while weapon is stuck in ground!
         if (CurrentState == EnemyState.StuckInGround)
@@ -929,6 +1098,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
         if (health > 0f)
         {
+            AnnounceBossPhaseIfNeeded();
             if (ragdoll != null)
             {
                 // Less knockback while stuck so boss doesn't slide away from his stuck weapon

@@ -243,14 +243,16 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
 
     private void DrawVitals(float h)
     {
-        Rect rect=new Rect(16,h-76,180,60);Box(rect);
-        GUI.Label(new Rect(rect.x+10,rect.y+6,160,18),$"Sinh lực {Mathf.RoundToInt(campaign.Health01*100)}%",hudBody);
-        ThinBar(new Rect(rect.x+10,rect.y+26,160,6),campaign.Health01,new Color(.72f,.22f,.19f));
+        Rect rect=new Rect(16,h-82,220,66);Box(rect);
+        GUI.Label(new Rect(rect.x+10,rect.y+6,200,18),$"Sinh lực {Mathf.RoundToInt(campaign.Health01*100)}%",hudBody);
+        ThinBar(new Rect(rect.x+10,rect.y+26,200,6),campaign.Health01,new Color(.72f,.22f,.19f));
         string resource=campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Prologue
             ? $"Lương {Mathf.RoundToInt(campaign.FoodProgress*100)}% · lớn {campaign.GrowthPhase+1}/4"
-            : campaign.IsBattleActive ? $"Hạ {campaign.Kills}/{campaign.victoryKills} · hỏa {Mathf.RoundToInt(campaign.Heat01*100)}%"
+            : campaign.IsBattleActive ? $"Hạ {campaign.Kills}/{campaign.victoryKills} · áp {Mathf.RoundToInt(campaign.BattlePressure01*100)}% · hỏa {Mathf.RoundToInt(campaign.Heat01*100)}%"
             : campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Preparation ? $"Trang bị {Mathf.Min(campaign.EquipmentStep,4)}/4" : "Phù Đổng Thiên Vương";
-        GUI.Label(new Rect(rect.x+10,rect.y+37,160,17),resource,small);
+        GUI.Label(new Rect(rect.x+10,rect.y+37,200,17),resource,small);
+        if (campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Battle && campaign.CurrentWeapon == ThanhGiongCampaignController.Weapon.Bamboo)
+            GUI.Label(new Rect(rect.x+10,rect.y+52,200,14),campaign.BambooVariantName,small);
     }
 
     private string ControlHint()
@@ -326,7 +328,7 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
         ThanhGiongCampaignController.Chapter.Prologue => $"Gom lương thực để Gióng lớn thành tráng sĩ. {Mathf.RoundToInt(campaign.Food)}/{campaign.foodPerGrowth * 3f}.",
         ThanhGiongCampaignController.Chapter.Preparation => $"Nhận giáp, nón và ngựa vua ban. Bước {Mathf.Min(campaign.EquipmentStep + 1, 4)}/4.",
         ThanhGiongCampaignController.Chapter.Battle when campaign.CurrentWeapon == ThanhGiongCampaignController.Weapon.None => "Gươm đã gãy. Đến khóm tre sáng, nhấn E ba lần để nhổ tre.",
-        ThanhGiongCampaignController.Chapter.Battle => "Dẹp quân Ân, hạ tướng giặc và lên Núi Sóc.",
+        ThanhGiongCampaignController.Chapter.Battle => $"Dẹp quân Ân. Áp lực {Mathf.RoundToInt(campaign.BattlePressure01*100)}%; dùng đúng loại tre để phá vòng vây.",
         ThanhGiongCampaignController.Chapter.Ascension => "Đặt giáp, nón trên đỉnh Sóc. Cưỡi ngựa về trời.",
         _ => "Hoàn thành đại nghiệp cứu quốc. Non sông thái bình."
     };
@@ -343,7 +345,7 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
         if (campaign.Heat01 >= 1) return "HỎA KHÍ ĐẦY  ·  NHẤN F PHUN LỬA";
         return campaign.CurrentWeapon switch {
             ThanhGiongCampaignController.Weapon.IronSword => "GƯƠM SẮT  ·  QUÉT SẠCH QUÂN ÂN",
-            ThanhGiongCampaignController.Weapon.Bamboo => "TRE NGÀ  ·  QUÉT 360°",
+            ThanhGiongCampaignController.Weapon.Bamboo => campaign.BambooVariantName.ToUpperInvariant()+"  ·  QUÉT 360°",
             _ => "E: NHẶT / TƯƠNG TÁC"
         };
     }

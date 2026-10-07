@@ -9,6 +9,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
 {
     public enum Chapter { Prologue, Preparation, Battle, Ascension, Complete }
     public enum Weapon { None, IronSword, Bamboo, Environment }
+    public enum BambooVariant { Standard, SwiftYoung, HeavyRoot, FireBamboo }
 
     [Header("Scene references")]
     public GameObject battleRoot;
@@ -48,6 +49,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
     public ThanhGiongImprovisedWeapon CarriedWeapon { get; private set; }
     public int EquipmentStep => qteIndex;
     public bool EquipmentBusy => mountedMotion != null && mountedMotion.IsBusy;
+    public BambooVariant CurrentBambooVariant { get; private set; } = BambooVariant.Standard;
+    public string BambooVariantName => CurrentBambooVariant switch { BambooVariant.SwiftYoung => "Tre Non Nhanh", BambooVariant.HeavyRoot => "Tre Gốc Đại Lực", BambooVariant.FireBamboo => "Tre Ngà Hỏa", _ => "Tre Ngà Chuẩn" };
 
     public string StageTitle => CurrentChapter switch
     {
@@ -116,7 +119,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
     private string WeaponName => CurrentWeapon switch
     {
         Weapon.IronSword => "Gươm Sắt (Chém Thư Pháp)",
-        Weapon.Bamboo => "Khóm Tre Ngà (Quét 360°)",
+        Weapon.Bamboo => BambooVariantName + " (Quét 360°)",
         Weapon.Environment => "Đá / Gốc cây",
         _ => "Tay không"
     };
@@ -358,9 +361,10 @@ public class ThanhGiongCampaignController : MonoBehaviour
             if (bambooQte >= 3)
             {
                 CurrentWeapon = Weapon.Bamboo;
+                CurrentBambooVariant = DetermineBambooVariant(item);
                 CollapsePulledBamboo(item);
                 vfx?.PlayBambooSweep(transform, 7.5f);
-                ShowMessage("NHỔ TRE THÀNH CÔNG! BỤI TRE NGÀ ĐÃ THÀNH VŨ KHÍ — BỤI TRE NÀO CŨNG CÓ THỂ NHỔ!", 3f);
+                ShowMessage($"NHỔ {BambooVariantName.ToUpperInvariant()} THÀNH CÔNG! MỖI BỤI TRE CHO NHỊP ĐÁNH KHÁC NHAU.", 3f);
             }
             else
             {
@@ -608,11 +612,31 @@ public class ThanhGiongCampaignController : MonoBehaviour
         return item != null && !string.IsNullOrWhiteSpace(item.displayName) ? item.displayName.ToUpperInvariant() : "BỤI TRE NGÀ";
     }
 
+    private BambooVariant DetermineBambooVariant(ThanhGiongCollectible item)
+    {
+        if (item == null) return BambooVariant.Standard;
+        string path = BuildLowerPath(item.transform);
+        string display = (item.displayName ?? string.Empty).ToLowerInvariant();
+        string key = path + "/" + display;
+        if (key.Contains("fire") || key.Contains("lua") || key.Contains("lửa") || key.Contains("chay") || key.Contains("cháy")) return BambooVariant.FireBamboo;
+        if (key.Contains("root") || key.Contains("goc") || key.Contains("gốc") || key.Contains("big") || key.Contains("large")) return BambooVariant.HeavyRoot;
+        if (key.Contains("young") || key.Contains("non") || key.Contains("leaf") || key.Contains("la") || key.Contains("lá")) return BambooVariant.SwiftYoung;
+        int roll = Mathf.Abs(item.GetEntityId().GetHashCode()) % 4;
+        return roll switch { 1 => BambooVariant.SwiftYoung, 2 => BambooVariant.HeavyRoot, 3 => BambooVariant.FireBamboo, _ => BambooVariant.Standard };
+    }
+
     private MeleeProfile GetMeleeProfile(bool bamboo)
     {
-        return bamboo
-            ? new MeleeProfile(true, 43f, 5.6f, 0f, 1.10f, .78f, .58f, 10f, 1.26f, -1f)
-            : new MeleeProfile(false, 25f, 3.25f, 2.05f, .16f, .44f, .32f, 6f, .74f, -.08f);
+        if (!bamboo)
+            return new MeleeProfile(false, 25f, 3.25f, 2.05f, .16f, .44f, .32f, 6f, .74f, -.08f);
+
+        return CurrentBambooVariant switch
+        {
+            BambooVariant.SwiftYoung => new MeleeProfile(true, 34f, 5.1f, 0f, .82f, .54f, .46f, 8f, 1.05f, -1f),
+            BambooVariant.HeavyRoot => new MeleeProfile(true, 56f, 6.25f, 0f, 1.32f, .96f, .70f, 9f, 1.55f, -1f),
+            BambooVariant.FireBamboo => new MeleeProfile(true, 45f, 5.75f, 0f, 1.05f, .74f, .58f, 16f, 1.32f, -1f),
+            _ => new MeleeProfile(true, 43f, 5.6f, 0f, 1.10f, .78f, .58f, 10f, 1.26f, -1f)
+        };
     }
 
     private float CalculateMeleeDamage(MeleeProfile profile, ThanhGiongEnemy enemy, float distance, float radius, int beat)
@@ -709,6 +733,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
             float damage = CalculateMeleeDamage(profile, enemy, flatToEnemy.magnitude, radius, beat);
             float impactScale = CalculateImpactScale(profile, damage, enemy, flatToEnemy.magnitude, radius, beat);
             enemy.TakeDamage(damage, profile.Stun, transform.position, impactScale, profile.Bamboo);
+            if (profile.Bamboo && CurrentBambooVariant == BambooVariant.FireBamboo)
+                enemy.TakeDamage(6f + BattlePressure01 * 6f, .12f, transform.position, .55f, false);
             combatFeedback?.PlayImpact(enemy.transform, profile.Bamboo);
             struck++;
         }
@@ -725,6 +751,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (profile.Bamboo)
         {
             vfx?.PlayBambooSweep(transform, radius);
+            if (CurrentBambooVariant == BambooVariant.FireBamboo && struck > 0) vfx?.PlayFireLine(transform, Mathf.Min(16f, radius * 2.2f));
+            if (CurrentBambooVariant == BambooVariant.HeavyRoot && struck > 0) IsometricCameraFollow.Instance?.Shake(.75f, .65f);
             audioFx?.PlayBamboo();
         }
         else
@@ -823,6 +851,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         StopAllCoroutines(); clearMessageRoutine = null; pendingStrike=null;comboBeat=0;comboUntil=0;
         isTransitioning = false; hurtUntil = 0; nextAttackTime = 0; chargeHits.Clear();
         CurrentChapter = state.chapter; CurrentWeapon = state.weapon;
+        if (CurrentWeapon != Weapon.Bamboo) CurrentBambooVariant = BambooVariant.Standard;
         Food = state.food; Heat = state.heat; Health = Mathf.Clamp(state.health, 1, maxHealth);
         GrowthPhase = state.growth; Kills = state.kills; qteIndex = state.qte; bambooQte = state.bamboo;
         if (CarriedWeapon != null) { CarriedWeapon.Throw(transform.forward); CarriedWeapon = null; }
@@ -855,7 +884,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         Health = maxHealth; hurtUntil = 0; nextAttackTime = 0;
         Kills = 0; qteIndex = 0; bambooQte = 0;
         chargeHits.Clear();
-        CurrentWeapon = Weapon.IronSword; Heat = maxHeat * .5f;
+        CurrentWeapon = Weapon.IronSword; CurrentBambooVariant = BambooVariant.Standard; Heat = maxHeat * .5f;
         if (CarriedWeapon != null) { CarriedWeapon.Throw(transform.forward); CarriedWeapon = null; }
         TeleportPlayer(battleSpawn); transform.rotation = battleSpawnRotation;
         movement.enabled = true;
