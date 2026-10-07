@@ -12,29 +12,54 @@ public sealed class GodotEnvironmentMotion : MonoBehaviour {
  readonly Dictionary<Renderer,Material[]> originalMaterials=new();
  void Awake(){
   Shader shader=Shader.Find("ThanhGiong/LegendSurface");
+  Shader foliageShader=Shader.Find("ThanhGiong/StylizedFoliageWind");
   foreach(Renderer renderer in GetComponentsInChildren<Renderer>(true)){
    string path=Path(renderer.transform).ToLowerInvariant();
    if(renderer is SkinnedMeshRenderer || renderer is ParticleSystemRenderer || renderer is LineRenderer || renderer.GetComponent<TextMesh>())continue;
    int kind=path.Contains("datlang")?1:path.Contains("duongdatuon")||path.Contains("sandat")||path.Contains("sanchien")||path.Contains("baichien")?2:path.Contains("triangularcloth")||path.Contains("goldclothedging")?4:path.Contains("dongsong")?5:path.Contains("culms")||path.Contains("leaves")||path.Contains("tree_default")||path.Contains("grass_large")||path.Contains("plant_bush")||path.Contains("crops_wheat")?3:0;
    bool culm=renderer.transform.name.StartsWith("Culms"),leaf=renderer.transform.name.StartsWith("Leaves");
    if(culm)kind=6;else if(leaf)kind=7;
-   if(shader==null)continue;
+   bool isFoliage=(kind==3||culm||leaf);
+   Shader targetShader=(isFoliage&&foliageShader!=null)?foliageShader:shader;
+   if(targetShader==null)continue;
    var originals=renderer.sharedMaterials;var converted=new Material[originals.Length];
    originalMaterials[renderer]=originals;
    for(int i=0;i<originals.Length;i++){
-    Material old=originals[i],m=new(shader);m.name="Port "+renderer.name+" "+i;
+    Material old=originals[i],m=new(targetShader);m.name="Port "+renderer.name+" "+i;
     Color color=Color.white;Texture texture=null;string textureKey=null;
     if(old!=null){foreach(string key in new[]{"baseColorFactor","_BaseColorFactor","_BaseColor","_Color"})if(old.HasProperty(key)){color=old.GetColor(key);break;}
      foreach(string key in new[]{"baseColorTexture","_BaseColorTexture","_BaseMap","_MainTex"})if(old.HasProperty(key)){texture=old.GetTexture(key);if(texture!=null){textureKey=key;break;}}}
     if(kind==1)color=new Color(.34f,.43f,.27f);
     if(kind==2)color=new Color(.56f,.44f,.29f);
     if(kind==5)color=new Color(.29f,.47f,.48f);
-    if(culm)color=path.Contains("trenga")?new Color(.72f,.64f,.37f):new Color(.35f,.47f,.25f);
-    if(leaf)color=new Color(.35f,.49f,.26f);
-    m.SetColor("_BaseColor",color);if(texture!=null){m.SetTexture("_BaseMap",texture);m.SetTextureScale("_BaseMap",old.GetTextureScale(textureKey));m.SetTextureOffset("_BaseMap",old.GetTextureOffset(textureKey));}m.SetFloat("_Mode",kind);
+    if(culm)color=path.Contains("trenga")?new Color(.78f,.70f,.39f):new Color(.35f,.50f,.25f);
+    if(leaf)color=new Color(.38f,.55f,.28f);
+    if(kind==3)color=new Color(.38f,.52f,.28f);
+    m.SetColor("_BaseColor",color);if(texture!=null){m.SetTexture("_BaseMap",texture);m.SetTextureScale("_BaseMap",old.GetTextureScale(textureKey));m.SetTextureOffset("_BaseMap",old.GetTextureOffset(textureKey));}
     var filter=renderer.GetComponent<MeshFilter>();float height=filter&&filter.sharedMesh?filter.sharedMesh.bounds.size.y:1;
-    m.SetFloat("_UseVertexColors",filter&&filter.sharedMesh&&filter.sharedMesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.Color)?1:0);
-    m.SetFloat("_Height",Mathf.Max(height,.1f));m.SetFloat("_Amplitude",kind==4?.10f:height*.018f);m.SetFloat("_Clearing",path.Contains("san")||path.Contains("baichien")?1:0);
+    if(isFoliage&&targetShader==foliageShader){
+     m.SetColor("_CanopyColor",new Color(.92f,.98f,.70f,1f));
+     m.SetColor("_UndergrowthColor",new Color(.24f,.38f,.18f,1f));
+     m.SetFloat("_WrapLighting",.60f);
+     m.SetColor("_TransmissionColor",new Color(.82f,.92f,.35f,1f));
+     m.SetFloat("_TransmissionIntensity",.75f);
+     m.SetFloat("_AmbientBoost",.38f);
+     m.SetColor("_RimColor",new Color(.95f,.98f,.75f,1f));
+     m.SetFloat("_RimPower",3.2f);
+     m.SetFloat("_RimIntensity",.45f);
+     m.SetFloat("_WindSpeed",culm?1.8f:1.6f);
+     m.SetFloat("_WindTurbulence",2.4f);
+     m.SetFloat("_TrunkSway",culm?.12f:Mathf.Clamp(height*.022f,.06f,.14f));
+     m.SetFloat("_LeafFlutter",.042f);
+     m.SetVector("_WindDirection",new Vector4(.85f,0f,.52f,0f));
+     m.SetFloat("_HeightGradientScale",Mathf.Max(height,2.0f));
+     m.SetFloat("_WindHeightThreshold",.15f);
+     m.SetFloat("_Cull",0f);
+    }else{
+     m.SetFloat("_Mode",kind);
+     m.SetFloat("_UseVertexColors",filter&&filter.sharedMesh&&filter.sharedMesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.Color)?1:0);
+     m.SetFloat("_Height",Mathf.Max(height,.1f));m.SetFloat("_Amplitude",kind==4?.10f:height*.018f);m.SetFloat("_Clearing",path.Contains("san")||path.Contains("baichien")?1:0);
+    }
     converted[i]=m;materials.Add(m);
    }renderer.sharedMaterials=converted;
   }

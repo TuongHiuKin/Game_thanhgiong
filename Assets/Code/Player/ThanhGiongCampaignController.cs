@@ -186,6 +186,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
 
     private void Start()
     {
+        hurtUntil = Time.time + 1.2f;
         WarpToChapter(startingChapter);
     }
 
@@ -628,7 +629,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
     private MeleeProfile GetMeleeProfile(bool bamboo)
     {
         if (!bamboo)
-            return new MeleeProfile(false, 25f, 3.25f, 2.05f, .16f, .44f, .32f, 6f, .74f, -.08f);
+            return new MeleeProfile(false, 25f, 3.25f, 2.05f, .16f, .38f, .32f, 6f, .74f, -.08f);
 
         return CurrentBambooVariant switch
         {
@@ -868,7 +869,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
     {
         CharacterController cc = GetComponent<CharacterController>();
         Vector3 away = transform.position - source; away.y = 0;
-        Vector3 impulse = away.normalized * 7f + Vector3.up * 2f;
+        Vector3 impulse = away.normalized * 6f;
         float elapsed = 0;
         while (elapsed < .2f && !IsDead && cc != null && cc.enabled) {
             elapsed += Time.deltaTime;
