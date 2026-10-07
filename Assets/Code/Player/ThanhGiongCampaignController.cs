@@ -20,10 +20,14 @@ public class ThanhGiongCampaignController : MonoBehaviour
     [Header("Balance")]
     public float foodPerGrowth = 100f;
     public float maxHeat = 100f;
-    public int swordBreakKills = 7;
+    public int swordBreakKills = 6;
     public int victoryKills = 18;
-    public float maxHealth = 100f;
-    public float hurtInvulnerabilitySeconds = .55f;
+    public float maxHealth = 90f;
+    public float hurtInvulnerabilitySeconds = .42f;
+    [Header("Hard Mode Pressure")]
+    [Tooltip("Áp lực tổng thể tăng dần trong Màn 3 sau mỗi kẻ địch bị hạ.")]
+    [Range(1f, 2f)] public float battlePressureScale = 1.35f;
+    [Range(0f, 1f)] public float startingBattlePressure = .18f;
     [Tooltip("Màn bắt đầu khi scene được mở trực tiếp.")]
     public Chapter startingChapter = Chapter.Prologue;
 
@@ -39,6 +43,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
     public bool IsBattleActive => CurrentChapter == Chapter.Battle && !IsDead && !isTransitioning;
     public float FoodProgress => CurrentChapter == Chapter.Prologue ? Mathf.Clamp01(Food / (foodPerGrowth * 3f)) : 1f;
     public float Heat01 => Heat / maxHeat;
+    public float BattlePressure01 => CurrentChapter == Chapter.Battle ? Mathf.Clamp01(startingBattlePressure + (Kills / Mathf.Max(1f, victoryKills)) * (1f - startingBattlePressure)) : 0f;
     public string CenterMessage { get; private set; }
     public ThanhGiongImprovisedWeapon CarriedWeapon { get; private set; }
     public int EquipmentStep => qteIndex;
@@ -62,11 +67,11 @@ public class ThanhGiongCampaignController : MonoBehaviour
             if (CurrentChapter == Chapter.Preparation)
                 return $"MỤC TIÊU MÀN 2: Hoàn tất 4 bước trang bị vua ban (Bước {Mathf.Min(qteIndex + 1, 4)}/4): Nhấn E (Mặc giáp) → Q (Đội nón) → E (Lên ngựa sắt) → F (Phun lửa kiểm tra vũ khí)!";
             if (CurrentChapter == Chapter.Battle && CurrentWeapon == Weapon.IronSword)
-                return $"MỤC TIÊU MÀN 3: Càn quét tiền tuyến bằng Gươm Sắt (Hạ {Kills}/{victoryKills} giặc). Chuột trái chém gươm, SPACE nhảy, SHIFT phi ngựa, E nhặt đá/cây!";
+                return $"MỤC TIÊU MÀN 3: Càn quét tiền tuyến bằng Gươm Sắt (Hạ {Kills}/{victoryKills} giặc). Áp lực giặc tăng theo từng đợt; né đúng nhịp và nhặt đá/cây khi bị vây!";
             if (CurrentChapter == Chapter.Battle && CurrentWeapon == Weapon.None)
                 return $"CẢNH BÁO: Gươm sắt đã gãy! Chạy ngay đến khóm tre ngà phát sáng và nhấn [E] {(3 - bambooQte)} lần nữa để NHỔ TRE TIẾP CHIẾN!";
             if (CurrentChapter == Chapter.Battle)
-                return $"MỤC TIÊU MÀN 3: Dùng Khóm Tre Ngà quét sạch tàn quân & Tướng giặc (Hạ {Kills}/{victoryKills} giặc). Khi đủ 100% nhiệt, nhấn F phun Hỏa Tuyến!";
+                return $"MỤC TIÊU MÀN 3: Dùng Khóm Tre Ngà quét sạch tàn quân & Tướng giặc (Hạ {Kills}/{victoryKills} giặc). Càng về cuối giặc càng áp sát nhanh; tích đủ 100% nhiệt rồi nhấn F phun Hỏa Tuyến!";
             if (CurrentChapter == Chapter.Ascension)
                 return $"MỤC TIÊU MÀN 4: Nghi thức cởi giáp trên đỉnh Núi Sóc (Bước {Mathf.Min(qteIndex + 1, 3)}/3): Nhấn E → Q → E đặt từng mảnh giáp sắt xuống núi rồi bay về trời!";
             return "Hoàn thành đại nghiệp cứu quốc. Non sông thái bình, truyền thuyết Thánh Gióng sống mãi muôn đời.";
@@ -77,10 +82,36 @@ public class ThanhGiongCampaignController : MonoBehaviour
     {
         Chapter.Prologue => $"Tiến độ: Lương thực {Mathf.RoundToInt(Food)}/{foodPerGrowth * 3f}  ·  Thể chất: Bậc {GrowthPhase + 1}/4" + (Food >= foodPerGrowth * 3f ? " [HOÀN THÀNH - ĐANG CHUYỂN MÀN 2...]" : ""),
         Chapter.Preparation => $"Tiến độ: Trang bị {qteIndex}/4 bước  ·  Trạng thái: " + (qteIndex switch { 0 => "Chờ mặc giáp [E]", 1 => "Đã mặc giáp vàng -> Chờ đội nón [Q]", 2 => "Đã đội nón sắt -> Chờ lên ngựa [E]", 3 => "Đã lên ngựa sắt -> Nhấn [F] phun lửa xuất quân!", _ => "Sẵn sàng xuất trận!" }),
-        Chapter.Battle => $"Tiến độ: Hạ địch {Kills}/{victoryKills}  ·  Vũ khí: {WeaponName}  ·  Nhiệt lượng: {Mathf.RoundToInt(Heat01 * 100)}%" + (CarriedWeapon != null ? "  [Đang vác vật thể]" : ""),
+        Chapter.Battle => $"Tiến độ: Hạ địch {Kills}/{victoryKills}  ·  Áp lực: {Mathf.RoundToInt(BattlePressure01 * 100)}%  ·  Vũ khí: {WeaponName}  ·  Nhiệt lượng: {Mathf.RoundToInt(Heat01 * 100)}%" + (CarriedWeapon != null ? "  [Đang vác vật thể]" : ""),
         Chapter.Ascension => $"Tiến độ: Cởi giáp {qteIndex}/3 bước  ·  Địa điểm: Đỉnh Núi Sóc",
         _ => "Hoàn thành đại nghiệp cứu quốc · Đất nước thái bình"
     };
+
+    public float GetEnemySpeedScale(bool boss)
+    {
+        float pressure = BattlePressure01;
+        float endScale = boss ? battlePressureScale + .06f : battlePressureScale;
+        return Mathf.Lerp(1.05f, endScale, pressure);
+    }
+
+    public float GetEnemyDamageScale(bool boss)
+    {
+        float pressure = BattlePressure01;
+        float endScale = boss ? 1.55f : 1.42f;
+        return Mathf.Lerp(1.08f, endScale, pressure);
+    }
+
+    public float GetEnemyCooldownScale(bool boss)
+    {
+        float pressure = BattlePressure01;
+        return Mathf.Lerp(.9f, boss ? .66f : .62f, pressure);
+    }
+
+    public float GetEnemyAttackRangeScale(bool boss)
+    {
+        float pressure = BattlePressure01;
+        return Mathf.Lerp(1f, boss ? 1.18f : 1.12f, pressure);
+    }
 
     private string WeaponName => CurrentWeapon switch
     {
@@ -580,8 +611,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
     private MeleeProfile GetMeleeProfile(bool bamboo)
     {
         return bamboo
-            ? new MeleeProfile(true, 46f, 5.9f, 0f, 1.35f, .70f, .58f, 13f, 1.38f, -1f)
-            : new MeleeProfile(false, 28f, 3.45f, 2.15f, .22f, .38f, .32f, 8f, .82f, -.15f);
+            ? new MeleeProfile(true, 43f, 5.6f, 0f, 1.10f, .78f, .58f, 10f, 1.26f, -1f)
+            : new MeleeProfile(false, 25f, 3.25f, 2.05f, .16f, .44f, .32f, 6f, .74f, -.08f);
     }
 
     private float CalculateMeleeDamage(MeleeProfile profile, ThanhGiongEnemy enemy, float distance, float radius, int beat)
@@ -727,7 +758,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
     {
         if (IsDead) return;
         Kills++;
-        Heat = Mathf.Min(maxHeat, Heat + (enemy.isBoss ? 45f : 15f));
+        Heat = Mathf.Min(maxHeat, Heat + (enemy.isBoss ? 35f : 10f));
 
         if (CurrentWeapon == Weapon.IronSword && Kills >= swordBreakKills)
         {

@@ -17,28 +17,28 @@ public class ThanhGiongEnemy : MonoBehaviour
     }
 
     [Header("Enemy Attributes")]
-    public float maxHealth = 55f;
-    public float moveSpeed = 2.4f;
+    public float maxHealth = 65f;
+    public float moveSpeed = 2.75f;
     public float engageDistance = 80f;
     public bool isBoss;
     public string enemyName = "Giáo Binh Ân";
 
     [Header("Heavy Slam & Vulnerability (Understory Mechanics)")]
-    public float heavyAttackRange = 4.2f;
-    public float heavyAttackCooldown = 5.5f;
-    public float telegraphDuration = 0.85f;
-    public float stuckDuration = 1.5f;           // Đại đao găm đất đúng 1,5 giây
-    public float vulnerabilityMultiplier = 2.0f; // Nhận gấp đôi sát thương khi đang mắc kẹt!
-    public float slamDamage = 35f;
-    public float slamRadius = 2.8f;
-    public float minionAttackInterval = 2.0f;
+    public float heavyAttackRange = 4.5f;
+    public float heavyAttackCooldown = 4.6f;
+    public float telegraphDuration = 0.72f;
+    public float stuckDuration = 1.15f;           // Cửa sổ phản công ngắn hơn khi tăng độ khó
+    public float vulnerabilityMultiplier = 1.75f; // Vẫn có thưởng né, nhưng boss ít bị phạt hơn.
+    public float slamDamage = 42f;
+    public float slamRadius = 3.15f;
+    public float minionAttackInterval = 1.55f;
     public float locomotionSmoothTime = 0.16f;
 
     [Header("Iron Horse Pursuit & Formation")]
-    public float surroundRadius = 2.6f;
-    public float formationTolerance = 0.65f;
-    public float separationRadius = 1.1f;
-    public float separationStrength = 1.35f;
+    public float surroundRadius = 2.25f;
+    public float formationTolerance = 0.5f;
+    public float separationRadius = 1.0f;
+    public float separationStrength = 1.25f;
 
     public EnemyState CurrentState { get; private set; } = EnemyState.Idle;
     public bool IsStuckInGround => CurrentState == EnemyState.StuckInGround;
@@ -98,8 +98,8 @@ public class ThanhGiongEnemy : MonoBehaviour
         initialRotation = transform.rotation;
         if (isBoss)
         {
-            maxHealth = 480f;
-            moveSpeed = 3.0f;
+            maxHealth = 540f;
+            moveSpeed = 3.2f;
             enemyName = "Tướng Giặc Ân";
             transform.localScale = initialScale * 1.8f;
         }
@@ -405,14 +405,18 @@ public class ThanhGiongEnemy : MonoBehaviour
         float sqrDist = delta.sqrMagnitude;
 
         // Boss Heavy Slam trigger check
-        if (isBoss && Time.time >= nextHeavyAttackTime && attackSqrDist <= heavyAttackRange * heavyAttackRange)
+        float attackRangeScale = campaign != null ? campaign.GetEnemyAttackRangeScale(isBoss) : 1f;
+        float heavyRange = heavyAttackRange * attackRangeScale;
+        float minionRange = 2.8f * attackRangeScale;
+
+        if (isBoss && Time.time >= nextHeavyAttackTime && attackSqrDist <= heavyRange * heavyRange)
         {
             StartCoroutine(PerformHeavySlamTelegraph());
             return;
         }
 
         // Minion quick spear thrust check
-        if (!isBoss && Time.time >= nextMinionAttackTime && attackSqrDist <= 2.8f * 2.8f)
+        if (!isBoss && Time.time >= nextMinionAttackTime && attackSqrDist <= minionRange * minionRange)
         {
             StartCoroutine(PerformMinionThrust());
             return;
@@ -452,8 +456,9 @@ public class ThanhGiongEnemy : MonoBehaviour
         }
 
         // Apply physical velocity
-        float catchUpMultiplier = attackSqrDist > engageDistance * engageDistance ? 1.2f : 1f;
-        Vector3 targetVelocity = direction * moveSpeed * catchUpMultiplier;
+        float speedScale = campaign != null ? campaign.GetEnemySpeedScale(isBoss) : 1f;
+        float catchUpMultiplier = attackSqrDist > engageDistance * engageDistance ? 1.32f : 1f;
+        Vector3 targetVelocity = direction * moveSpeed * speedScale * catchUpMultiplier;
         SmoothVelocity(targetVelocity);
 
         if (direction.sqrMagnitude > 0.001f)
@@ -545,7 +550,8 @@ public class ThanhGiongEnemy : MonoBehaviour
 
     private void SmoothVelocity(Vector3 targetVelocity)
     {
-        smoothedPlanarVelocity = Vector3.SmoothDamp(smoothedPlanarVelocity, targetVelocity, ref velocityDamp, locomotionSmoothTime, moveSpeed * 4f, Time.fixedDeltaTime);
+        float speedScale = campaign != null ? campaign.GetEnemySpeedScale(isBoss) : 1f;
+        smoothedPlanarVelocity = Vector3.SmoothDamp(smoothedPlanarVelocity, targetVelocity, ref velocityDamp, locomotionSmoothTime, moveSpeed * speedScale * 4f, Time.fixedDeltaTime);
         rb.linearVelocity = new Vector3(smoothedPlanarVelocity.x, rb.linearVelocity.y, smoothedPlanarVelocity.z);
     }
 
@@ -564,11 +570,18 @@ public class ThanhGiongEnemy : MonoBehaviour
             transform.rotation = Quaternion.LookRotation(faceDir.normalized, Vector3.up);
 
         // Spawn glowing red telegraph warning ring on ground
-        SpawnWarningRing(slamTargetPos, slamRadius);
+        float pressure = campaign != null ? campaign.BattlePressure01 : 0f;
+        float cooldownScale = campaign != null ? campaign.GetEnemyCooldownScale(true) : 1f;
+        float damageScale = campaign != null ? campaign.GetEnemyDamageScale(true) : 1f;
+        float effectiveTelegraph = Mathf.Max(.42f, telegraphDuration * Mathf.Lerp(1f, .78f, pressure));
+        float effectiveSlamRadius = slamRadius * Mathf.Lerp(1f, 1.14f, pressure);
+        float effectiveStuckDuration = Mathf.Max(.55f, stuckDuration * Mathf.Lerp(1f, .74f, pressure));
+
+        SpawnWarningRing(slamTargetPos, effectiveSlamRadius);
 
         // Procedural wind-up: Lean body backward and raise upward
         float elapsed = 0f;
-        while (elapsed < telegraphDuration)
+        while (elapsed < effectiveTelegraph)
         {
             if (health <= 0f || Time.time < stunnedUntil || campaign == null || !campaign.IsBattleActive)
             {
@@ -578,7 +591,7 @@ public class ThanhGiongEnemy : MonoBehaviour
             }
 
             elapsed += Time.deltaTime;
-            float t = elapsed / telegraphDuration;
+            float t = elapsed / effectiveTelegraph;
 
             if (visualModel != null && visualModel != transform)
             {
@@ -601,18 +614,18 @@ public class ThanhGiongEnemy : MonoBehaviour
         }
 
         // Ground shockwave effects & camera shake
-        SpawnGroundImpact(slamTargetPos, slamRadius);
+        SpawnGroundImpact(slamTargetPos, effectiveSlamRadius);
         IsometricCameraFollow.Instance?.Shake(0.7f, 0.45f);
 
         // Check if player is caught in slam
         Vector3 slamOffset = target.position - slamTargetPos;
         slamOffset.y = 0;
         float distanceToPlayer = slamOffset.magnitude;
-        bool hitPlayer = distanceToPlayer <= slamRadius;
+        bool hitPlayer = distanceToPlayer <= effectiveSlamRadius;
 
         if (hitPlayer)
         {
-            campaign?.DamagePlayer(slamDamage, transform.position);
+            campaign?.DamagePlayer(slamDamage * damageScale, transform.position);
             // Player hit! Boss knocks player back and swiftly recovers
             Vector3 pushDir = (target.position - slamTargetPos).normalized;
             if (pushDir.sqrMagnitude < 0.01f) pushDir = transform.forward;
@@ -626,24 +639,24 @@ public class ThanhGiongEnemy : MonoBehaviour
 
             yield return new WaitForSeconds(0.4f);
             ResetVisualPose();
-            nextHeavyAttackTime = Time.time + heavyAttackCooldown;
+            nextHeavyAttackTime = Time.time + heavyAttackCooldown * cooldownScale;
             CurrentState = EnemyState.Chasing;
         }
         else
         {
             // PLAYER DODGED! WEAPON GETS STUCK IN THE GROUND (Understory mudLodge)!
             CurrentState = EnemyState.StuckInGround;
-            stateTimer = stuckDuration;
+            stateTimer = effectiveStuckDuration;
             SpawnStuckBladeMarker(slamTargetPos);
 
             // Announce critical vulnerability window to player
-            campaign?.ShowMessage("★ SƠ HỞ! ĐẠI ĐAO CỦA TƯỚNG GIẶC GĂM XUỐNG ĐẤT — PHẢN CÔNG GÂY X2 SÁT THƯƠNG! ★", stuckDuration);
+            campaign?.ShowMessage("★ SƠ HỞ NGẮN! ĐẠI ĐAO GĂM XUỐNG ĐẤT — PHẢN CÔNG NGAY! ★", effectiveStuckDuration);
 
             // Spawn stuck sparks & dust puff
             SpawnBladeSparks(slamTargetPos + Vector3.up * 0.2f);
 
             // Wait out stuck duration while struggling
-            yield return new WaitForSeconds(stuckDuration);
+            yield return new WaitForSeconds(effectiveStuckDuration);
 
             if (CurrentState == EnemyState.StuckInGround && health > 0f)
             {
@@ -655,7 +668,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
                 yield return new WaitForSeconds(0.45f);
                 ResetVisualPose();
-                nextHeavyAttackTime = Time.time + heavyAttackCooldown;
+                nextHeavyAttackTime = Time.time + heavyAttackCooldown * cooldownScale;
                 CurrentState = EnemyState.Chasing;
             }
         }
@@ -663,7 +676,11 @@ public class ThanhGiongEnemy : MonoBehaviour
 
     private IEnumerator PerformMinionThrust()
     {
-        nextMinionAttackTime = Time.time + minionAttackInterval;
+        float cooldownScale = campaign != null ? campaign.GetEnemyCooldownScale(false) : 1f;
+        float damageScale = campaign != null ? campaign.GetEnemyDamageScale(false) : 1f;
+        float rangeScale = campaign != null ? campaign.GetEnemyAttackRangeScale(false) : 1f;
+        float pressure = campaign != null ? campaign.BattlePressure01 : 0f;
+        nextMinionAttackTime = Time.time + minionAttackInterval * cooldownScale;
         CurrentState = EnemyState.TelegraphingAttack;
         if (rb != null) SmoothVelocity(Vector3.zero);
         Vector3 origPos = visualModel != null ? visualModel.localPosition : Vector3.zero;
@@ -675,10 +692,10 @@ public class ThanhGiongEnemy : MonoBehaviour
             visualModel.localRotation = visualBaseLocalRot * Quaternion.Euler(15f, 0f, 0f);
         }
 
-        yield return new WaitForSeconds(0.22f);
+        yield return new WaitForSeconds(Mathf.Lerp(0.20f, 0.14f, pressure));
         if (health > 0f && Time.time >= stunnedUntil && target != null && campaign != null &&
-            campaign.IsBattleActive && Vector3.Distance(target.position, transform.position) < 3f)
-            campaign.DamagePlayer(8f, transform.position);
+            campaign.IsBattleActive && Vector3.Distance(target.position, transform.position) < 3f * rangeScale)
+            campaign.DamagePlayer(8f * damageScale, transform.position);
         ResetVisualPose();
         if (health > 0f && Time.time >= stunnedUntil) CurrentState = EnemyState.Chasing;
     }
