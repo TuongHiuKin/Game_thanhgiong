@@ -60,8 +60,7 @@ public class ThanhGiongGoldenDissolve : MonoBehaviour
     {
         renderers = GetComponentsInChildren<Renderer>(true);
         originals = new Material[renderers.Length][];
-        Shader shader = Shader.Find("ThanhGiong/Golden Noise Dissolve");
-        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
+        Shader shader = ResolveDissolveShader();
 
         for (int r = 0; r < renderers.Length; r++)
         {
@@ -72,7 +71,7 @@ public class ThanhGiongGoldenDissolve : MonoBehaviour
             for (int m = 0; m < replacements.Length; m++)
             {
                 Material source = originals[r][m];
-                Material material = new Material(shader);
+                Material material = shader != null ? new Material(shader) : new Material(source);
 
                 if (source != null)
                 {
@@ -87,9 +86,9 @@ public class ThanhGiongGoldenDissolve : MonoBehaviour
                         material.SetColor("_BaseColor", source.GetColor("_Color"));
                 }
 
-                material.SetColor("_EdgeColor", edgeColor);
-                material.SetFloat("_Dissolve", 0f);
-                material.SetFloat("_EdgeWidth", 0.14f);
+                if (material.HasProperty("_EdgeColor")) material.SetColor("_EdgeColor", edgeColor);
+                if (material.HasProperty("_Dissolve")) material.SetFloat("_Dissolve", 0f);
+                if (material.HasProperty("_EdgeWidth")) material.SetFloat("_EdgeWidth", 0.14f);
 
                 replacements[m] = material;
                 runtimeMaterials.Add(material);
@@ -145,9 +144,26 @@ public class ThanhGiongGoldenDissolve : MonoBehaviour
         colorOverLife.color = fade;
 
         ParticleSystemRenderer psRenderer = ash.GetComponent<ParticleSystemRenderer>();
-        Shader partShader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (partShader == null) partShader = Shader.Find("Sprites/Default");
-        psRenderer.material = new Material(partShader) { color = edgeColor };
+        Shader partShader = ResolveParticleShader();
+        if (partShader != null) psRenderer.material = new Material(partShader) { color = edgeColor };
+    }
+
+    private static Shader ResolveDissolveShader()
+    {
+        Shader shader = Shader.Find("ThanhGiong/Golden Noise Dissolve");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        return shader;
+    }
+
+    private static Shader ResolveParticleShader()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        return shader;
     }
 
     private void OnDisable()

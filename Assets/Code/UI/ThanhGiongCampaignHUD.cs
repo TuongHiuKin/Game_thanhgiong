@@ -1,417 +1,419 @@
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.SceneManagement;
 
+// Compact red/bronze Kenney HUD. Scaled game time keeps popup durations frozen during pause.
 public class ThanhGiongCampaignHUD : MonoBehaviour
 {
     public ThanhGiongCampaignController campaign;
-    [Header("Kenney Fantasy UI")]
-    public Texture2D panelFrame;
-    public Texture2D bannerFrame;
-    public Texture2D dividerTexture;
-    public Texture2D combatCursor;
-
-    private GUIStyle titleStyle;
-    private GUIStyle subtitleStyle;
-    private GUIStyle objectiveStyle;
-    private GUIStyle controlKeyStyle;
-    private GUIStyle controlDescStyle;
-    private GUIStyle statStyle;
-    private GUIStyle barTextStyle;
-    private GUIStyle bannerStyle;
-    private GUIStyle promptStyle;
-    private GUIStyle panelFrameStyle;
-    private GUIStyle bannerFrameStyle;
-
-    private readonly Color panelBg = new Color(0.06f, 0.08f, 0.14f, 0.94f);
-    private readonly Color panelBorder = new Color(0.85f, 0.70f, 0.25f, 0.85f);
-    private readonly Color goldColor = new Color(1.0f, 0.85f, 0.20f);
-    private readonly Color cyanColor = new Color(0.35f, 0.92f, 1.0f);
-    private readonly Color foodGreen = new Color(0.20f, 0.88f, 0.38f);
-    private readonly Color heatOrange = new Color(1.0f, 0.36f, 0.08f);
-    private readonly Color shadowColor = new Color(0f, 0f, 0f, 0.9f);
-    private ThanhGiongEnemy cachedBoss;
-    private float nextBossCheckTime;
-    private bool guidesVisible;
-    private float promptVisibleUntil;
+    public Texture2D panelFrame, bannerFrame, dividerTexture, combatCursor;
+    [Range(1, 20)] public float missionPopupSeconds = 6f;
+    [Range(1, 20)] public float controlsPopupSeconds = 4f;
+    [Range(.05f, 1)] public float popupFadeSeconds = .3f;
+    public bool MissionVisible => Time.time < missionUntil;
+    public bool ControlsVisible => Time.time < controlsUntil;
+    public bool GuideVisible => guidesVisible;
+    public bool IsPaused => paused;
+    public int ChapterCount => ChapterScenes.Length;
+    public bool RegionIntroVisible => Time.time < regionUntil;
+    public int PauseSelection { get; private set; }
+    public static float CanvasScale(Rect safeArea) => Mathf.Max(.1f,Mathf.Min(safeArea.width/1280f,safeArea.height/720f));
+    private static readonly string[] ChapterScenes = {
+        "LangGiongTienTuyen", "KinhThanhRenThep", "PhaoDaiNgamQuanAn", "ThungLungVuotSong",
+        "TranTuyenNuiSoc", "DinhSocHoaThanh", "AlbionForestMap"
+    };
+    private static readonly string[] ChapterLabels = {
+        "1 · LÀNG PHÙ ĐỔNG", "2 · KINH THÀNH RÈN THÉP", "3 · PHÁO ĐÀI QUÂN ÂN", "4 · THUNG LŨNG VƯỢT SÔNG",
+        "5 · TRẬN TUYẾN NÚI SÓC", "6 · ĐỈNH SÓC HÓA THÁNH", "RỪNG ALBION · THỬ NGHIỆM"
+    };
+    private string pauseNotice = string.Empty;
+    private float missionUntil, controlsUntil, nextBossCheck, regionUntil;
+    private bool guidesVisible, paused, haveState;
     private ThanhGiongCampaignController.Chapter previousChapter;
     private ThanhGiongCampaignController.Weapon previousWeapon;
-    private bool previousHeatReady;
-    private bool previousCarrying;
+    private int previousStep, previousGrowth;
+    private bool previousHeatReady, previousCarrying, nearInteraction;
+    private ThanhGiongEnemy cachedBoss;
+    private LegendSeedSkills seeds;
+    private LegendCheckpoint checkpoint;
+    private GUIStyle title, body, caption, small, centered, frame, button, hudTitle, hudBody, tile;
+    private readonly Collider[] nearby = new Collider[32];
+    private static readonly Color Paper = new Color(.94f, .87f, .73f);
+    private static readonly Color Gold = new Color(.83f, .65f, .33f);
+    private static readonly Color Muted = new Color(.71f, .63f, .52f);
+    private static readonly Color Red = new Color(.18f, .055f, .045f, .65f);
 
     private void Start()
     {
-        if (campaign != null)
-        {
-            previousChapter = campaign.CurrentChapter;
-            previousWeapon = campaign.CurrentWeapon;
-            previousHeatReady = campaign.Heat01 >= 1f;
-            previousCarrying = campaign.CarriedWeapon != null;
+        if (campaign == null) campaign = FindAnyObjectByType<ThanhGiongCampaignController>();
+        if(campaign!=null){seeds=campaign.GetComponent<LegendSeedSkills>();checkpoint=campaign.GetComponent<LegendCheckpoint>();}
+        RecallPopups();
+        regionUntil=Time.time+3.8f;
+        if (combatCursor != null) Cursor.SetCursor(combatCursor,
+            new Vector2(combatCursor.width * .18f, combatCursor.height * .18f), CursorMode.Auto);
+    }
+
+    public void RecallPopups()
+    {
+        missionUntil = Time.time + missionPopupSeconds;
+        controlsUntil = Time.time + controlsPopupSeconds;
+    }
+
+    public void TogglePause()
+    {
+        if (ThanhGiongSceneTransition.IsTransitioning) return;
+        paused = !paused;
+        Time.timeScale = paused ? 0 : 1;
+        pauseNotice = string.Empty;
+        if(paused)PauseSelection=0;
+    }
+
+    public bool SelectChapter(int index)
+    {
+        if (index < 0 || index >= ChapterScenes.Length) return false;
+        return LoadFromPause(ChapterScenes[index], "ĐANG ĐẾN " + ChapterLabels[index]);
+    }
+
+    public bool RestartCurrentMap()
+    {
+        if(paused&&!ThanhGiongSceneTransition.IsTransitioning)LegendCheckpoint.ForgetScene(SceneManager.GetActiveScene().name);
+        return LoadFromPause(SceneManager.GetActiveScene().name, "ĐANG CHƠI LẠI MÀN…");
+    }
+
+    public bool RestartCheckpoint()
+    {
+        if(!paused||checkpoint==null||!checkpoint.HasCheckpoint||ThanhGiongSceneTransition.IsTransitioning)return false;
+        paused=false;Time.timeScale=1;
+        if(checkpoint.RestartCheckpoint()){guidesVisible=false;return true;}
+        paused=true;Time.timeScale=0;pauseNotice="Chờ động tác hiện tại kết thúc rồi thử lại.";return false;
+    }
+
+    private bool LoadFromPause(string sceneName, string message)
+    {
+        if (!paused || ThanhGiongSceneTransition.IsTransitioning) return false;
+        // Scene fades use scaled time, so release pause before starting their coroutine.
+        paused = false; Time.timeScale = 1;
+        if (ThanhGiongSceneTransition.TryTransitionTo(sceneName, message)) {
+            guidesVisible = false; pauseNotice = string.Empty; return true;
         }
-        if (combatCursor != null)
-            Cursor.SetCursor(combatCursor, new Vector2(combatCursor.width * 0.18f, combatCursor.height * 0.18f), CursorMode.Auto);
+        paused = true; Time.timeScale = 0;
+        pauseNotice = "Màn này chưa sẵn sàng để mở. Chọn màn khác hoặc tiếp tục chơi.";
+        return false;
     }
 
     private void Update()
     {
+        if (Input.GetKeyDown(KeyCode.Escape)) TogglePause();
         if (Input.GetKeyDown(KeyCode.F1)) guidesVisible = !guidesVisible;
-        if (campaign == null) return;
-
-        bool heatReady = campaign.Heat01 >= 1f;
+        if (Input.GetKeyDown(KeyCode.Tab)) RecallPopups();
+        if(paused)UpdatePauseNavigation();
+        if(seeds==null&&campaign!=null)seeds=campaign.GetComponent<LegendSeedSkills>();
+        if(checkpoint==null&&campaign!=null)checkpoint=campaign.GetComponent<LegendCheckpoint>();
+        if (campaign == null || paused) return;
+        bool ready = campaign.Heat01 >= 1;
         bool carrying = campaign.CarriedWeapon != null;
-        if (campaign.CurrentChapter != previousChapter ||
-            campaign.CurrentWeapon != previousWeapon ||
-            (heatReady && !previousHeatReady) ||
-            (carrying && !previousCarrying))
-            promptVisibleUntil = Time.time + 4f;
+        if (!haveState || previousChapter != campaign.CurrentChapter || previousStep != campaign.EquipmentStep) RecallPopups();
+        else if (previousWeapon != campaign.CurrentWeapon || previousGrowth != campaign.GrowthPhase ||
+            (ready && !previousHeatReady) || (carrying && !previousCarrying)) controlsUntil = Time.time + controlsPopupSeconds;
+        if(haveState&&(previousGrowth!=campaign.GrowthPhase||previousWeapon!=campaign.CurrentWeapon))missionUntil=Time.time+missionPopupSeconds;
+        previousChapter = campaign.CurrentChapter; previousWeapon = campaign.CurrentWeapon;
+        previousStep = campaign.EquipmentStep; previousGrowth = campaign.GrowthPhase;
+        previousHeatReady = ready; previousCarrying = carrying; haveState = true;
+        bool nowNear = false;
+        int count = Physics.OverlapSphereNonAlloc(campaign.transform.position, 4.5f, nearby, ~0, QueryTriggerInteraction.Collide);
+        for (int i = 0; i < count; i++) {
+            if (nearby[i].GetComponentInParent<ThanhGiongCollectible>() != null ||
+                nearby[i].GetComponentInParent<ThanhGiongImprovisedWeapon>() != null) { nowNear = true; break; }
+        }
+        if (nowNear && !nearInteraction) controlsUntil = Time.time + controlsPopupSeconds;
+        nearInteraction = nowNear;
+    }
 
-        previousChapter = campaign.CurrentChapter;
-        previousWeapon = campaign.CurrentWeapon;
-        previousHeatReady = heatReady;
-        previousCarrying = carrying;
+    private void UpdatePauseNavigation()
+    {
+        const int choices=13;
+        if(Input.GetKeyDown(KeyCode.DownArrow))PauseSelection=(PauseSelection+1)%choices;
+        if(Input.GetKeyDown(KeyCode.UpArrow))PauseSelection=(PauseSelection+choices-1)%choices;
+        float step=Input.GetKeyDown(KeyCode.RightArrow)?.05f:Input.GetKeyDown(KeyCode.LeftArrow)?-.05f:0;
+        if(step!=0&&PauseSelection>=3&&PauseSelection<=5) {
+            float master=LegendAudioMix.Master,music=LegendAudioMix.Music,effects=LegendAudioMix.Effects;
+            if(PauseSelection==3)master+=step;else if(PauseSelection==4)music+=step;else effects+=step;
+            LegendAudioMix.SetMix(master,music,effects);
+        }
+        if(!Input.GetKeyDown(KeyCode.Return)&&!Input.GetKeyDown(KeyCode.KeypadEnter))return;
+        if(PauseSelection==0)TogglePause();else if(PauseSelection==1)RestartCheckpoint();
+        else if(PauseSelection==2)RestartCurrentMap();else if(PauseSelection>=6)SelectChapter(PauseSelection-6);
     }
 
     private void EnsureStyles()
     {
-        if (titleStyle != null) return;
+        if (title != null) return;
+        title = Style(23, Paper, true); body = Style(15, Muted); caption = Style(13, Gold);
+        small = Style(11, Muted); centered = Style(19, Paper, true); centered.alignment = TextAnchor.MiddleCenter;
+        hudTitle = Style(15, Paper, true); hudBody = Style(12, Paper);
+        tile = Style(11, Paper); tile.alignment = TextAnchor.MiddleCenter;
+        frame = new GUIStyle(GUI.skin.box);
+        frame.normal.background = panelFrame;
+        frame.border = new RectOffset(8, 8, 8, 8);
+        button = new GUIStyle(GUI.skin.button) { fontSize = 13, wordWrap = true };
+        button.normal.textColor = Paper; button.hover.textColor = Gold;
+        button.active.textColor = Gold;
+    }
 
-        titleStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 26,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleLeft
-        };
-
-        subtitleStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 20,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleLeft
-        };
-
-        objectiveStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 18,
-            fontStyle = FontStyle.Bold,
-            wordWrap = true,
-            alignment = TextAnchor.UpperLeft
-        };
-
-        controlKeyStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 17,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleLeft
-        };
-
-        controlDescStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 17,
-            wordWrap = true,
-            alignment = TextAnchor.MiddleLeft
-        };
-
-        statStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 16,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleLeft
-        };
-
-        barTextStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 15,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleCenter
-        };
-
-        bannerStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 32,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleCenter,
-            wordWrap = true
-        };
-
-        promptStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 22,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleCenter
-        };
-
-        panelFrameStyle = CreateFrameStyle(panelFrame, 8);
-        bannerFrameStyle = CreateFrameStyle(bannerFrame != null ? bannerFrame : panelFrame, 8);
+    private static GUIStyle Style(int size, Color color, bool bold = false)
+    {
+        GUIStyle result = new GUIStyle(GUI.skin.label) { fontSize = size, wordWrap = true,
+            fontStyle = bold ? FontStyle.Bold : FontStyle.Normal };
+        result.normal.textColor = color; return result;
     }
 
     private void OnGUI()
     {
         if (campaign == null) return;
         EnsureStyles();
+        Matrix4x4 oldMatrix = GUI.matrix;
+        Color oldColor = GUI.color;
+        // A fixed logical canvas avoids overlapping boxes on narrow Game views.
+        Rect safe=Screen.safeArea;
+        if(safe.width<=0||safe.height<=0)safe=new Rect(0,0,Screen.width,Screen.height);
+        float scale = CanvasScale(safe);
+        float w = safe.width / scale, h = safe.height / scale;
+        GUI.matrix = Matrix4x4.TRS(new Vector3(safe.x,Screen.height-safe.yMax,0),Quaternion.identity,new Vector3(scale,scale,1));
+        if(RegionIntroVisible&&!paused&&!guidesVisible) {
+            GUI.color=new Color(1,1,1,PopupAlpha(regionUntil,3.8f));
+            GUI.Label(new Rect((w-420)/2,22,420,30),SceneTitle(),centered);
+            GUI.Label(new Rect((w-360)/2,54,360,22),RegionSubtitle(),small);
+        }
+        if (MissionVisible) {
+            GUI.color = new Color(1, 1, 1, PopupAlpha(missionUntil,missionPopupSeconds));
+            Rect rect = new Rect(16, 16, 280, 100);
+            Box(rect);
+            GUI.Label(new Rect(28, 25, 256, 22), SceneTitle(), hudTitle);
+            GUI.Label(new Rect(28, 49, 256, 38), ShortObjective(), hudBody);
+            GUI.Label(new Rect(28, 91, 256, 18), Sequence(), small);
+        }
+        GUI.color = Color.white;
+        if (!paused && !guidesVisible) DrawVitals(h);
+        if (ControlsVisible && !paused && !guidesVisible) {
+            GUI.color = new Color(1, 1, 1, PopupAlpha(controlsUntil,controlsPopupSeconds));
+            Rect actions = new Rect((w - 500) / 2, h - 112, 500, 26);
+            Box(actions);
+            GUI.Label(new Rect(actions.x + 10, actions.y + 4, 480, 18), ControlHint(), small);
+        }
+        GUI.color = Color.white;
+        if(seeds!=null&&seeds.IsPlantingContext&&!paused&&!guidesVisible)DrawSeedBar(w,h);
+        DrawBoss(w);
+        if (campaign.IsDead || !string.IsNullOrEmpty(campaign.CenterMessage)) {
+            Rect message = new Rect((w - 420) / 2, h - 166, 420, 40);
+            Box(message); GUI.Label(new Rect(message.x + 12, message.y + 4, 396, 32), campaign.IsDead ? "GIÓNG ĐÃ GỤC NGÃ · R: VỀ ĐIỂM DỪNG CHÂN" : ShortNotice(campaign.CenterMessage), hudBody);
+        }
+        if (guidesVisible || paused) {
+            float guideHeight = paused ? 640 : 350;
+            Rect guide = new Rect((w - 560) / 2, (h - guideHeight) / 2, 560, guideHeight);
+            Box(guide, true);
+            GUI.Label(new Rect(guide.x + 24, guide.y + 20, 512, 40), paused ? "TẠM DỪNG" : "BINH PHÁP PHÙ ĐỔNG", title);
+            string help=paused ? "WASD đi · Shift phi ngựa · Space nhảy · C/Alt né\nChuột đánh · 1–5 chọn hạt · Q gieo / đội nón\nR về điểm dừng chân khi gục ngã · F1 trợ giúp\nMenu: ↑↓ chọn · ←→ âm lượng · Enter xác nhận" :
+                "WASD: di chuyển · Shift: phi ngựa · Space: nhảy · C / Alt: lăn né\nChuột trái: chém gươm / quét tre / ném đá\n1–5: chọn hạt (1: Quang Căn / Lumen bẫy ánh sáng giữ chân, 2: Tre, 3: Sen, 4: Lửa, 5: Gió) · Q: gieo hạt\nE: nhặt lương thực, nhổ tre, vác đá · F: phun lửa khi hỏa khí đầy\nE → Q → E → F: trang bị xuất quân · E → Q → E: cởi giáp, tháo nón, hóa thánh\nNé vòng đỏ của tướng giặc; phản công khi đao mắc kẹt.\nR: về điểm dừng chân khi gục ngã · Tab: nhiệm vụ · F1: trợ giúp";
+            GUI.Label(new Rect(guide.x+24,guide.y+(paused?66:76),512,paused?82:246),help,body);
+            if (paused) DrawPauseButtons(guide);
+        }
+        GUI.color = oldColor; GUI.matrix = oldMatrix;
+    }
 
-        if (guidesVisible)
-        {
-        // 1. LEFT MAIN OBJECTIVE & STATUS PANEL
-        float leftW = Mathf.Clamp(Screen.width * 0.43f, 420f, 720f);
-        float leftH = 265f;
-        Rect leftRect = new Rect(20f, 20f, leftW, leftH);
+    private float PopupAlpha(float until,float duration) => Mathf.Clamp01((until-Time.time)/popupFadeSeconds)*Mathf.Clamp01((duration-until+Time.time)/popupFadeSeconds);
 
-        DrawFantasyBox(leftRect, panelBg, panelBorder, panelFrameStyle, 2.5f);
+    private void DrawSeedBar(float w,float h)
+    {
+        float x=(w-320)/2, y=h-76;
+        string[] names={"LUMEN", "TRE", "SEN", "LỬA", "GIÓ"};
+        Color previous=GUI.color;
+        for(int i=0;i<5;i++) {
+            bool selected=(int)seeds.SelectedSeed==i;
+            GUI.color=selected?Color.white:new Color(1,1,1,seeds.ReadyFor(i)?.72f:.40f);
+            Rect slot=new Rect(x+4+i*64,y,56,32);Box(slot);
+            GUI.color=selected?Gold:new Color(Paper.r,Paper.g,Paper.b,.75f);
+            GUI.Label(new Rect(slot.x+2,slot.y+2,52,28),$"{i+1} {names[i]}",tile);
+            if(seeds.CooldownFor(i)>0)ThinBar(new Rect(slot.x+5,slot.yMax-4,46,2),Mathf.Clamp01(seeds.CooldownFor(i)/10),Muted);
+            if(selected)GUI.DrawTexture(new Rect(slot.x+8,slot.yMax-2,40,1),Texture2D.whiteTexture);
+        }
+        GUI.color=previous;
+        string cooldown=seeds.CooldownRemaining>0?$"{seeds.CooldownRemaining:0.0}s":"Q gieo";
+        string[] effects={"Bẫy ánh sáng Lumen (Giữ chân)", "Mầm tre xanh (Sát thương)", "Sen phục hồi (Trị thương)", "Hạt than hồng (Thiêu đốt)", "Hạt gió cuốn (Đẩy lùi)"};
+        GUI.Label(new Rect(x,y+35,320,18),$"{effects[(int)seeds.SelectedSeed]} · {seeds.Mana:0}/{seeds.MaxMana:0} · giá {seeds.ManaCost:0} · {seeds.ChargesRemaining} hạt · {cooldown}",small);
+    }
 
-        // Header Title
-        DrawShadowLabel(new Rect(leftRect.x + 18f, leftRect.y + 12f, leftW - 36f, 34f), campaign.StageTitle, titleStyle, goldColor, shadowColor);
+    private void DrawVitals(float h)
+    {
+        Rect rect=new Rect(16,h-76,180,60);Box(rect);
+        GUI.Label(new Rect(rect.x+10,rect.y+6,160,18),$"Sinh lực {Mathf.RoundToInt(campaign.Health01*100)}%",hudBody);
+        ThinBar(new Rect(rect.x+10,rect.y+26,160,6),campaign.Health01,new Color(.72f,.22f,.19f));
+        string resource=campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Prologue
+            ? $"Lương {Mathf.RoundToInt(campaign.FoodProgress*100)}% · lớn {campaign.GrowthPhase+1}/4"
+            : campaign.IsBattleActive ? $"Hạ {campaign.Kills}/{campaign.victoryKills} · hỏa {Mathf.RoundToInt(campaign.Heat01*100)}%"
+            : campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Preparation ? $"Trang bị {Mathf.Min(campaign.EquipmentStep,4)}/4" : "Phù Đổng Thiên Vương";
+        GUI.Label(new Rect(rect.x+10,rect.y+37,160,17),resource,small);
+    }
 
-        // Objective Text
-        DrawShadowLabel(new Rect(leftRect.x + 18f, leftRect.y + 50f, leftW - 36f, 54f), campaign.Objective, objectiveStyle, Color.white, shadowColor);
-        DrawDivider(new Rect(leftRect.x + 18f, leftRect.y + 103f, leftW - 36f, 4f));
+    private string ControlHint()
+    {
+        if(campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Preparation||campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Ascension)
+            return Sequence()+" · WASD di chuyển · Tab nhiệm vụ · F1 trợ giúp";
+        if(campaign.CarriedWeapon!=null||campaign.Heat01>=1||nearInteraction) return CompactStatus()+" · C/Alt né · F1 trợ giúp";
+        return "WASD đi · Chuột đánh · E tương tác · Q gieo hạt · C/Alt né · F1 trợ giúp";
+    }
 
-        // Food & Growth Bar
-        int currentPhase = campaign.GrowthPhase + 1;
-        string foodLabel = campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Prologue
-            ? $"LƯƠNG THỰC / THỂ CHẤT: {Mathf.RoundToInt(campaign.FoodProgress * 100)}% (BẬC {currentPhase}/4)"
-            : $"THỂ CHẤT THÁNH KHỔNG LỒ (BẬC {currentPhase}/4 - TĂNG LỰC ĐÁNH & PHẠM VI)";
-        DrawBar(new Rect(leftRect.x + 18f, leftRect.y + 112f, leftW - 36f, 26f), campaign.FoodProgress, foodGreen, foodLabel, barTextStyle);
+    private static string ShortNotice(string text)
+    {
+        string flat=text.Replace('\n',' ').Replace('\r',' ').Trim();
+        if(flat.Length<=110)return flat;
+        int end=flat.LastIndexOf(' ',106,106);return flat.Substring(0,end>70?end:106)+"…";
+    }
 
-        // Horse Heat / Fireline Bar
-        string heatLabel = campaign.Heat01 >= 1f
-            ? "NHIỆT LƯỢNG NGỰA SẮT: 100% >> [NHẤN F: HỎA TUYẾN SẴN SÀNG!]"
-            : $"NHIỆT LƯỢNG NGỰA SẮT: {Mathf.RoundToInt(campaign.Heat01 * 100)}% (TÍCH NHIỆT KHI ĐÁNH TRÚNG)";
-        Color currentHeatColor = campaign.Heat01 >= 1f ? new Color(1.0f, 0.85f, 0.1f) : heatOrange;
-        DrawBar(new Rect(leftRect.x + 18f, leftRect.y + 148f, leftW - 36f, 26f), campaign.Heat01, currentHeatColor, heatLabel, barTextStyle);
+    private void DrawPauseButtons(Rect guide)
+    {
+        bool wasEnabled = GUI.enabled;
+        GUI.enabled = !ThanhGiongSceneTransition.IsTransitioning;
+        if (GUI.Button(new Rect(guide.x + 24, guide.y + 158, 512, 32), "TIẾP TỤC  [ESC]", button)) TogglePause();
+        if (GUI.Button(new Rect(guide.x + 24, guide.y + 200, 250, 32), "VỀ ĐIỂM DỪNG CHÂN", button)) RestartCheckpoint();
+        if (GUI.Button(new Rect(guide.x + 286, guide.y + 200, 250, 32), "CHƠI LẠI TOÀN MÀN", button)) RestartCurrentMap();
+        GUI.Label(new Rect(guide.x+24,guide.y+251,512,22),"ÂM THANH",caption);
+        float master=MixSlider(guide,282,"TỔNG",LegendAudioMix.Master);
+        float music=MixSlider(guide,311,"NHẠC",LegendAudioMix.Music);
+        float effects=MixSlider(guide,340,"HIỆU ỨNG",LegendAudioMix.Effects);
+        if(!Mathf.Approximately(master,LegendAudioMix.Master)||!Mathf.Approximately(music,LegendAudioMix.Music)||!Mathf.Approximately(effects,LegendAudioMix.Effects))LegendAudioMix.SetMix(master,music,effects);
+        GUI.Label(new Rect(guide.x + 24, guide.y + 383, 512, 24), "CHỌN CHƯƠNG", caption);
+        for (int i = 0; i < ChapterScenes.Length; i++) {
+            int row = i / 2, column = i % 2;
+            Rect rect = new Rect(guide.x + 24 + column * 262, guide.y + 414 + row * 40, 250, 34);
+            if (GUI.Button(rect, ChapterLabels[i], button)) SelectChapter(i);
+        }
+        GUI.enabled = wasEnabled;
+        if (!string.IsNullOrEmpty(pauseNotice))
+            GUI.Label(new Rect(guide.x + 24, guide.y + 584, 512, 38), pauseNotice, small);
+        Rect focus;
+        if(PauseSelection==0)focus=new Rect(guide.x+24,guide.y+158,512,32);
+        else if(PauseSelection<=2)focus=new Rect(guide.x+24+(PauseSelection-1)*262,guide.y+200,250,32);
+        else if(PauseSelection<=5)focus=new Rect(guide.x+20,guide.y+273+(PauseSelection-3)*29,520,25);
+        else {int i=PauseSelection-6;focus=new Rect(guide.x+24+i%2*262,guide.y+414+i/2*40,250,34);}
+        Color saved=GUI.color;GUI.color=Gold;
+        GUI.DrawTexture(new Rect(focus.x-3,focus.y-2,focus.width+6,2),Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(focus.x-3,focus.yMax,focus.width+6,2),Texture2D.whiteTexture);
+        GUI.color=saved;
+    }
 
-        // Status Line
-        DrawShadowLabel(new Rect(leftRect.x + 18f, leftRect.y + 186f, leftW - 36f, 32f), campaign.StatusLine, statStyle, cyanColor, shadowColor);
+    private float MixSlider(Rect guide,float y,string label,float value)
+    {
+        GUI.Label(new Rect(guide.x+24,guide.y+y-3,130,22),label,small);
+        float result=GUI.HorizontalSlider(new Rect(guide.x+156,guide.y+y+3,328,18),value,0,1);
+        GUI.Label(new Rect(guide.x+490,guide.y+y-3,46,22),Mathf.RoundToInt(result*100)+"%",small);return result;
+    }
 
-        // Subtext / Tip
-        string tipText = campaign.CurrentChapter switch
-        {
-            ThanhGiongCampaignController.Chapter.Prologue => "Nhiệm vụ: Gom đủ 300 lương thực để Gióng lớn vụt lên, mái nhà tranh sập đổ và mở khóa Màn 2!",
-            ThanhGiongCampaignController.Chapter.Preparation => "Nhiệm vụ: Hoàn tất chuỗi QTE: E (Mặc giáp) → Q (Đội nón) → E (Lên ngựa) → F (Phun lửa) để xuất quân!",
-            ThanhGiongCampaignController.Chapter.Battle when campaign.CurrentWeapon == ThanhGiongCampaignController.Weapon.None => "CẢNH BÁO: Gươm sắt đã gãy! Chạy ngay đến khóm tre ngà phát sáng và nhấn [E] 3 lần để nhổ tre!",
-            ThanhGiongCampaignController.Chapter.Battle => "Nhiệm vụ: Dùng gươm/tre tiêu diệt sạch 18 quân giặc và Tướng giặc để mở đường lên đỉnh Núi Sóc!",
-            ThanhGiongCampaignController.Chapter.Ascension => "Nhiệm vụ: Nhấn E → Q → E cởi giáp sắt đặt lên đỉnh núi Sóc rồi bay về trời!",
-            _ => ""
+    private string SceneTitle() => SceneManager.GetActiveScene().name switch {
+        "LangGiongTienTuyen" => "LÀNG PHÙ ĐỔNG", "KinhThanhRenThep" => "KINH THÀNH RÈN THÉP",
+        "PhaoDaiNgamQuanAn" => "PHÁO ĐÀI QUÂN ÂN", "ThungLungVuotSong" => "THUNG LŨNG VƯỢT SÔNG",
+        "TranTuyenNuiSoc" => "TRẬN TUYẾN NÚI SÓC", "DinhSocHoaThanh" => "ĐỈNH SÓC HÓA THÁNH", _ => "THÁNH GIÓNG"
+    };
+    private string RegionSubtitle() => SceneManager.GetActiveScene().name switch {
+        "LangGiongTienTuyen" => "Lũy tre xanh giữ lời thề cứu nước.",
+        "KinhThanhRenThep" => "Từ lửa rèn, người anh hùng lên đường.",
+        "PhaoDaiNgamQuanAn" => "Phá vòng vây, mở đường về Núi Sóc.",
+        "ThungLungVuotSong" => "Qua cầu gỗ, theo tiếng nước về phía trước.",
+        "TranTuyenNuiSoc" => "Tre ngà quét giặc, non sông chờ bình yên.",
+        "DinhSocHoaThanh" => "Gác lại giáp sắt, cưỡi ngựa về trời.",
+        _ => "Theo con đường giữa những tán rừng."
+    };
+
+    private string ShortObjective() => campaign.CurrentChapter switch {
+        ThanhGiongCampaignController.Chapter.Prologue => $"Gom lương thực để Gióng lớn thành tráng sĩ. {Mathf.RoundToInt(campaign.Food)}/{campaign.foodPerGrowth * 3f}.",
+        ThanhGiongCampaignController.Chapter.Preparation => $"Nhận giáp, nón và ngựa vua ban. Bước {Mathf.Min(campaign.EquipmentStep + 1, 4)}/4.",
+        ThanhGiongCampaignController.Chapter.Battle when campaign.CurrentWeapon == ThanhGiongCampaignController.Weapon.None => "Gươm đã gãy. Đến khóm tre sáng, nhấn E ba lần để nhổ tre.",
+        ThanhGiongCampaignController.Chapter.Battle => "Dẹp quân Ân, hạ tướng giặc và lên Núi Sóc.",
+        ThanhGiongCampaignController.Chapter.Ascension => "Đặt giáp, nón trên đỉnh Sóc. Cưỡi ngựa về trời.",
+        _ => "Hoàn thành đại nghiệp cứu quốc. Non sông thái bình."
+    };
+
+    private string Sequence() => campaign.CurrentChapter switch {
+        ThanhGiongCampaignController.Chapter.Preparation => campaign.EquipmentBusy ? "ĐANG TRANG BỊ…" : "E  →  Q  →  E  →  F",
+        ThanhGiongCampaignController.Chapter.Ascension => campaign.EquipmentBusy ? "ĐANG ĐẶT TRANG BỊ…" : "E  →  Q  →  E",
+        _ => "TAB: XEM LẠI NHIỆM VỤ"
+    };
+
+    private string CompactStatus()
+    {
+        if (campaign.CarriedWeapon != null) return "ĐÁ / GỐC CÂY  ·  CHUỘT TRÁI ĐỂ NÉM";
+        if (campaign.Heat01 >= 1) return "HỎA KHÍ ĐẦY  ·  NHẤN F PHUN LỬA";
+        return campaign.CurrentWeapon switch {
+            ThanhGiongCampaignController.Weapon.IronSword => "GƯƠM SẮT  ·  QUÉT SẠCH QUÂN ÂN",
+            ThanhGiongCampaignController.Weapon.Bamboo => "TRE NGÀ  ·  QUÉT 360°",
+            _ => "E: NHẶT / TƯƠNG TÁC"
         };
-        if (!string.IsNullOrEmpty(tipText))
-        {
-            DrawShadowLabel(new Rect(leftRect.x + 18f, leftRect.y + 224f, leftW - 36f, 28f), tipText, controlDescStyle, new Color(1f, 0.92f, 0.65f), shadowColor);
-        }
-
-        // 2. RIGHT CONTROLS & COMBAT TECHNIQUES PANEL
-        float rightW = Mathf.Clamp(Screen.width * 0.32f, 340f, 520f);
-        float rightH = 285f;
-        Rect rightRect = new Rect(Screen.width - rightW - 20f, 20f, rightW, rightH);
-
-        DrawFantasyBox(rightRect, panelBg, panelBorder, panelFrameStyle, 2.5f);
-
-        DrawShadowLabel(new Rect(rightRect.x + 16f, rightRect.y + 12f, rightW - 32f, 30f), "ĐIỀU KHIỂN & VÕ CÔNG THÁNH GIÓNG", subtitleStyle, goldColor, shadowColor);
-
-        float lineY = rightRect.y + 48f;
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ W, A, S, D ]", "Di chuyển bốn hướng trên chiến trường");
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ LEFT SHIFT ]", "Phi ngựa nước đại & Húc văng quân giặc");
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ CHUỘT TRÁI ]", "Vung Gươm Sắt / Quét Tre Ngà 360° / Ném đá");
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ SPACE ]", "Nhảy qua địa hình thấp và vật cản");
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ E ]", "Nhặt lương thực / Nhổ Tre Ngà / Vác vật thể");
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ F ]", "HỎA TUYẾN: Ngựa sắt phun lửa thiêu rụi đồn trại");
-        DrawControlRow(rightRect.x + 16f, ref lineY, rightW - 32f, "[ Q / E ]", "QTE Mặc giáp vua ban & Cởi giáp về trời");
-        }
-
-        // 3. CENTER ANNOUNCEMENT BANNER
-        if (!string.IsNullOrEmpty(campaign.CenterMessage))
-        {
-            float bannerW = Mathf.Min(880f, Screen.width * 0.86f);
-            float bannerH = 88f;
-            float bannerX = (Screen.width - bannerW) * 0.5f;
-            float bannerY = Screen.height * 0.65f;
-            Rect bannerRect = new Rect(bannerX, bannerY, bannerW, bannerH);
-
-            DrawFantasyBox(bannerRect, new Color(0.04f, 0.05f, 0.08f, 0.96f), goldColor, bannerFrameStyle, 3f);
-            DrawShadowLabel(new Rect(bannerX + 16f, bannerY + 14f, bannerW - 32f, bannerH - 28f), campaign.CenterMessage, bannerStyle, goldColor, shadowColor);
-        }
-
-        // 4. TOP-CENTER BOSS HEALTH & VULNERABILITY BAR (Understory Boss Bar)
-        DrawBossHealthBar();
-
-        // 5. CONTEXTUAL DYNAMIC BOTTOM PROMPT
-        DrawContextualBottomPrompt();
     }
 
-    private void DrawBossHealthBar()
+    private void DrawBoss(float w)
     {
-        if (campaign == null || campaign.CurrentChapter != ThanhGiongCampaignController.Chapter.Battle) return;
-
-        if (cachedBoss == null || !cachedBoss.gameObject.activeInHierarchy || cachedBoss.HealthRatio <= 0f)
-        {
-            if (Time.time >= nextBossCheckTime)
-            {
-                nextBossCheckTime = Time.time + 1.0f;
-                var enemies = FindObjectsByType<ThanhGiongEnemy>();
-                foreach (var e in enemies)
-                {
-                    if (e.isBoss && e.gameObject.activeInHierarchy && e.HealthRatio > 0f)
-                    {
-                        cachedBoss = e;
-                        break;
-                    }
-                }
+        if (!campaign.IsBattleActive) return;
+        if (Time.time >= nextBossCheck) {
+            nextBossCheck = Time.time + 1;
+            if (cachedBoss == null || !cachedBoss.gameObject.activeInHierarchy || cachedBoss.HealthRatio <= 0) {
+                cachedBoss = null;
+                foreach (ThanhGiongEnemy enemy in FindObjectsByType<ThanhGiongEnemy>())
+                    if (enemy.isBoss && enemy.HealthRatio > 0) { cachedBoss = enemy; break; }
             }
         }
-
-        if (cachedBoss == null || !cachedBoss.gameObject.activeInHierarchy || cachedBoss.HealthRatio <= 0f) return;
-
-        // Render Boss HP bar at top center
-        float bossW = Mathf.Clamp(Screen.width * 0.42f, 440f, 620f);
-        float bossH = 56f;
-        float bossX = (Screen.width - bossW) * 0.5f;
-        float bossY = 16f;
-        Rect bossRect = new Rect(bossX, bossY, bossW, bossH);
-
-        bool isVulnerable = cachedBoss.IsStuckInGround;
-        Color frameBorder = isVulnerable ? new Color(1f, 0.2f, 0.05f) : panelBorder;
-        DrawFantasyBox(bossRect, panelBg, frameBorder, panelFrameStyle, isVulnerable ? 3.5f : 2.5f);
-
-        string bossTitle = isVulnerable
-            ? "★ TƯỚNG GIẶC ÂN — ĐẠI ĐAO MẮC KẸT [SƠ HỞ X2 SÁT THƯƠNG]! ★"
-            : $"TƯỚNG GIẶC ÂN · MÁU {Mathf.RoundToInt(cachedBoss.HealthRatio * 100)}%";
-
-        Color barCol = isVulnerable ? new Color(1.0f, 0.22f, 0.05f) : new Color(0.85f, 0.15f, 0.15f);
-        Color textCol = isVulnerable ? goldColor : Color.white;
-
-        DrawShadowLabel(new Rect(bossX + 12f, bossY + 4f, bossW - 24f, 22f), bossTitle, statStyle, textCol, shadowColor);
-        DrawBar(new Rect(bossX + 12f, bossY + 26f, bossW - 24f, 22f), cachedBoss.HealthRatio, barCol, $"{Mathf.RoundToInt(cachedBoss.HealthRatio * cachedBoss.maxHealth)} / {Mathf.RoundToInt(cachedBoss.maxHealth)}", barTextStyle);
+        if (cachedBoss == null || !cachedBoss.gameObject.activeInHierarchy || cachedBoss.HealthRatio <= 0) return;
+        Rect rect = new Rect(w - 226, 16, 210, 48);
+        Box(rect);
+        GUI.Label(new Rect(rect.x + 10, rect.y + 5, 190, 20), cachedBoss.IsStuckInGround ? "TƯỚNG ÂN · ĐAO MẮC KẸT!" : "TƯỚNG GIẶC ÂN",small);
+        ThinBar(new Rect(rect.x + 10, rect.y + 30, 190, 7), cachedBoss.HealthRatio, new Color(.7f, .22f, .19f));
     }
 
-    private void DrawControlRow(float startX, ref float currentY, float rowW, string keycap, string desc)
+    private void Box(Rect rect,bool expanded=false)
     {
-        float keycapW = 125f;
-        DrawShadowLabel(new Rect(startX, currentY, keycapW, 30f), keycap, controlKeyStyle, cyanColor, shadowColor);
-        DrawShadowLabel(new Rect(startX + keycapW + 6f, currentY, rowW - keycapW - 6f, 30f), desc, controlDescStyle, Color.white, shadowColor);
-        currentY += 31f;
-    }
-
-    private void DrawContextualBottomPrompt()
-    {
-        if (!guidesVisible && Time.time >= promptVisibleUntil) return;
-        string promptText = null;
-        Color promptColor = goldColor;
-
-        if (campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Prologue)
-        {
-            promptText = "GOM ĐỦ LƯƠNG THỰC DÂN LÀNG ĐỂ GIÓNG LỚN NHANH NHƯ THỔI!";
-            promptColor = foodGreen;
-        }
-        else if (campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Preparation)
-        {
-            promptText = "NHẤN [ E ] HOẶC [ Q ] THEO YÊU CẦU ĐỂ HOÀN TẤT TRANG BỊ!";
-            promptColor = goldColor;
-        }
-        else if (campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Battle)
-        {
-            if (campaign.CurrentWeapon == ThanhGiongCampaignController.Weapon.None)
-            {
-                promptText = ">> TIẾN LẠI KHÓM TRE VÀ NHẤN [ E ] ĐỂ NHỔ TRE NGÀ! <<";
-                promptColor = new Color(1.0f, 0.35f, 0.1f);
-            }
-            else if (campaign.Heat01 >= 1f)
-            {
-                promptText = ">> NHIỆT LƯỢNG 100%! NHẤN [ F ] ĐỂ PHUN HỎA TUYẾN NGỰA SẮT! <<";
-                promptColor = new Color(1.0f, 0.85f, 0.1f);
-            }
-            else if (campaign.CarriedWeapon != null)
-            {
-                promptText = ">> ĐANG VÁC VẬT THỂ — NHẤN [ CHUỘT TRÁI ] ĐỂ NÉM CHOÁNG QUÂN THÙ! <<";
-                promptColor = cyanColor;
-            }
-        }
-        else if (campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Ascension)
-        {
-            promptText = ">> NHẤN [ E ] ĐỂ CỞI GIÁP SẮT ĐẶT LÊN ĐỈNH NÚI SÓC! <<";
-            promptColor = goldColor;
-        }
-
-        if (string.IsNullOrEmpty(promptText)) return;
-
-        float promptW = Mathf.Min(780f, Screen.width * 0.8f);
-        float promptH = 50f;
-        float promptX = (Screen.width - promptW) * 0.5f;
-        float promptY = Screen.height - promptH - 24f;
-        Rect promptRect = new Rect(promptX, promptY, promptW, promptH);
-
-        DrawFantasyBox(promptRect, new Color(0.04f, 0.06f, 0.10f, 0.92f), promptColor, bannerFrameStyle, 2f);
-        DrawShadowLabel(promptRect, promptText, promptStyle, promptColor, shadowColor);
-    }
-
-    private static GUIStyle CreateFrameStyle(Texture2D texture, int border)
-    {
-        GUIStyle style = new GUIStyle(GUI.skin.box);
-        style.normal.background = texture;
-        style.border = new RectOffset(border, border, border, border);
-        style.padding = new RectOffset(border + 4, border + 4, border + 4, border + 4);
-        return style;
-    }
-
-    private void DrawDivider(Rect rect)
-    {
-        if (dividerTexture == null) return;
         Color previous = GUI.color;
-        GUI.color = new Color(1f, .82f, .32f, .72f);
-        GUI.DrawTexture(rect, dividerTexture, ScaleMode.StretchToFill, true);
+        GUI.color = new Color(Red.r, Red.g, Red.b, previous.a * (expanded?.94f:Red.a));
+        GUI.DrawTexture(rect, Texture2D.whiteTexture);
+        GUI.color = new Color(Gold.r, Gold.g, Gold.b, previous.a * (expanded?1:.6f));
+        if (panelFrame != null) {
+            // Draw only Kenney's border: its opaque texture center must not obscure the world.
+            float sourceX=Mathf.Min(.25f,8f/panelFrame.width),sourceY=Mathf.Min(.25f,8f/panelFrame.height);
+            float border=expanded?8:4;
+            GUI.DrawTextureWithTexCoords(new Rect(rect.x+border,rect.y,rect.width-2*border,border),panelFrame,new Rect(sourceX,1-sourceY,1-2*sourceX,sourceY));
+            GUI.DrawTextureWithTexCoords(new Rect(rect.x+border,rect.yMax-border,rect.width-2*border,border),panelFrame,new Rect(sourceX,0,1-2*sourceX,sourceY));
+            GUI.DrawTextureWithTexCoords(new Rect(rect.x,rect.y+border,border,rect.height-2*border),panelFrame,new Rect(0,sourceY,sourceX,1-2*sourceY));
+            GUI.DrawTextureWithTexCoords(new Rect(rect.xMax-border,rect.y+border,border,rect.height-2*border),panelFrame,new Rect(1-sourceX,sourceY,sourceX,1-2*sourceY));
+            for(int corner=0;corner<4;corner++) {
+                bool right=(corner&1)!=0,bottom=(corner&2)!=0;
+                GUI.DrawTextureWithTexCoords(new Rect(right?rect.xMax-border:rect.x,bottom?rect.yMax-border:rect.y,border,border),panelFrame,
+                    new Rect(right?1-sourceX:0,bottom?0:1-sourceY,sourceX,sourceY));
+            }
+        }
+        else {
+            GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, 2), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.x, rect.yMax - 2, rect.width, 2), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.x, rect.y, 2, rect.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(rect.xMax - 2, rect.y, 2, rect.height), Texture2D.whiteTexture);
+        }
         GUI.color = previous;
     }
 
-    private static void DrawFantasyBox(Rect rect, Color bg, Color border, GUIStyle frameStyle, float borderWidth = 2f)
+    private void ThinBar(Rect rect,float value,Color fill)
     {
-        GUI.color = bg;
-        GUI.DrawTexture(rect, Texture2D.whiteTexture);
-
-        if (frameStyle != null && frameStyle.normal.background != null)
-        {
-            GUI.color = border;
-            GUI.Box(rect, GUIContent.none, frameStyle);
-            GUI.color = Color.white;
-            return;
-        }
-
-        GUI.color = border;
-        GUI.DrawTexture(new Rect(rect.x, rect.y, rect.width, borderWidth), Texture2D.whiteTexture);
-        GUI.DrawTexture(new Rect(rect.x, rect.y + rect.height - borderWidth, rect.width, borderWidth), Texture2D.whiteTexture);
-        GUI.DrawTexture(new Rect(rect.x, rect.y, borderWidth, rect.height), Texture2D.whiteTexture);
-        GUI.DrawTexture(new Rect(rect.x + rect.width - borderWidth, rect.y, borderWidth, rect.height), Texture2D.whiteTexture);
-
-        GUI.color = Color.white;
+        Color previous=GUI.color;
+        GUI.color=new Color(.09f,.045f,.035f,.6f);GUI.DrawTexture(rect,Texture2D.whiteTexture);
+        GUI.color=fill;GUI.DrawTexture(new Rect(rect.x,rect.y,rect.width*Mathf.Clamp01(value),rect.height),Texture2D.whiteTexture);
+        GUI.color=previous;
     }
 
-    private void DrawBar(Rect rect, float value, Color fillColor, string label, GUIStyle fontStyle)
+    private void Bar(Rect rect, float value, Color fill, string label)
     {
-        DrawFantasyBox(rect, new Color(0.08f, 0.10f, 0.14f, 0.95f), new Color(0.55f, 0.48f, 0.28f, 0.8f), panelFrameStyle, 1.5f);
-
-        // Fill bar
-        float clamped = Mathf.Clamp01(value);
-        float fillW = (rect.width - 4f) * clamped;
-        if (fillW > 0.01f)
-        {
-            GUI.color = fillColor;
-            GUI.DrawTexture(new Rect(rect.x + 2f, rect.y + 2f, fillW, rect.height - 4f), Texture2D.whiteTexture);
-        }
-
-        // Drop shadow for label
-        Color prev = fontStyle.normal.textColor;
-        fontStyle.normal.textColor = new Color(0f, 0f, 0f, 0.95f);
-        GUI.Label(new Rect(rect.x + 1f, rect.y + 1f, rect.width, rect.height), label, fontStyle);
-
-        fontStyle.normal.textColor = Color.white;
-        GUI.Label(rect, label, fontStyle);
-        fontStyle.normal.textColor = prev;
-
-        GUI.color = Color.white;
+        Color previous = GUI.color;
+        GUI.color = new Color(.09f, .045f, .035f); GUI.DrawTexture(rect, Texture2D.whiteTexture);
+        GUI.color = fill; GUI.DrawTexture(new Rect(rect.x + 2, rect.y + 2, (rect.width - 4) * Mathf.Clamp01(value), rect.height - 4), Texture2D.whiteTexture);
+        GUI.color = previous;
+        GUI.Label(new Rect(rect.x + 8, rect.y + 2, rect.width - 16, rect.height), label + "  " + Mathf.RoundToInt(value * 100) + "%", small);
     }
 
-    private static void DrawShadowLabel(Rect rect, string text, GUIStyle style, Color textColor, Color shadow)
+    private void OnDisable()
     {
-        Color prev = style.normal.textColor;
-        style.normal.textColor = shadow;
-        GUI.Label(new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height), text, style);
-
-        style.normal.textColor = textColor;
-        GUI.Label(rect, text, style);
-        style.normal.textColor = prev;
+        if (paused) { Time.timeScale = 1; paused = false; }
     }
 }

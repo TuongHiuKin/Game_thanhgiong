@@ -36,3 +36,14 @@ __pycache__/
 .env.*
 .codex-unity-generator/
 .git-local/
+
+# Local agent/tooling copies and generated verification artifacts
+.agents/
+Backups/
+BuildRoot/
+PortVerification/
+IsometricVerification/
+Assets/Temp/
+Assets/Temp.meta
+Assets/UnitySkillsTests_Temp/
+Assets/UnitySkillsTests_Temp.meta

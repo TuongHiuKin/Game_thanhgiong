@@ -1,117 +1,250 @@
+﻿using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
-public class ThanhGiongCampaignAudio : MonoBehaviour
+// Original WAV palette migrated from Godot. Scene-owned loops/voices require no global audio host.
+public sealed class ThanhGiongCampaignAudio : MonoBehaviour
 {
-    private AudioSource music;
-    private AudioSource sfx;
-    private AudioClip growth;
-    private AudioClip slash;
-    private AudioClip bamboo;
-    private AudioClip fire;
-    private AudioClip hoof;
-    private AudioClip horseRoar;
-    private AudioClip roofCrash;
-    private AudioClip stoneSmash;
-    private AudioClip foodPickup;
-    private float nextHoof;
+    [Range(0, 1)] public float musicGain = .11f;
+    [Range(0, 1)] public float ambienceGain = .50f;
+    [Range(0, 1)] public float effectsGain = .8f;
+    public string Region { get; private set; }
+    public string LastSurface { get; private set; } = "dirt";
+    public int HoofCount { get; private set; }
+    public float CombatIntensity { get; private set; }
+    public float SpatialAmbienceGain { get; private set; }
+    public int SpatialEmitterCount => spatial.Count;
+    public string LastCue { get; private set; }
+    public int SeedCueCount { get; private set; }
+    private readonly Dictionary<string, AudioClip> clips = new Dictionary<string, AudioClip>();
+    private readonly RaycastHit[] groundHits = new RaycastHit[16];
+    private AudioSource music, combatMusic, ambience;
+    private readonly List<SpatialEmitter> spatial = new List<SpatialEmitter>();
+    private sealed class SpatialEmitter { public AudioSource source; public Bounds area; public float gain, radius; }
+    private ThanhGiongEnemy[] nearbyEnemies = new ThanhGiongEnemy[0];
+    private float enemyRefreshAt;
+    private readonly List<AudioClip> generated = new List<AudioClip>();
+    private AudioSource[] voices;
+    private CharacterController body;
+    private MountedHorseController movement;
+    private ThanhGiongCampaignController campaign;
+    private int voiceIndex;
+    private float age, hoofClock;
+    private bool paused;
+    private Renderer riverWater;
+    private GodotEnvironmentMotion forgeMotion;
+    private float previousForgePhase;
+
+    public static string RegionForScene(string scene) => scene switch {
+        "KinhThanhRenThep" => "forge", "PhaoDaiNgamQuanAn" => "camp",
+        "ThungLungVuotSong" => "river", "TranTuyenNuiSoc" => "battle",
+        "DinhSocHoaThanh" => "sacred", _ => "village"
+    };
 
     private void Awake()
     {
-        music = gameObject.AddComponent<AudioSource>();
-        sfx = gameObject.AddComponent<AudioSource>();
-        music.volume = .22f;
-        music.loop = true;
-        music.spatialBlend = 0f;
-        sfx.volume = .78f;
-        sfx.spatialBlend = 0f;
+        Region = RegionForScene(SceneManager.GetActiveScene().name);
+        body = GetComponent<CharacterController>();
+        movement = GetComponent<MountedHorseController>();
+        campaign = GetComponent<ThanhGiongCampaignController>();
+        music = NewVoice(true); ambience = NewVoice(true);
+        music.clip = Clip("music_" + (Region=="battle"?"camp":Region)); ambience.clip = Clip("ambient_" + Region);
+        combatMusic = NewVoice(true); combatMusic.clip = Clip("music_battle"); combatMusic.volume = 0;
+        music.volume = ambience.volume = 0;
+        if (music.clip != null) music.Play();
+        if (ambience.clip != null) ambience.Play();
+        if (combatMusic.clip != null) combatMusic.Play();
+        voices = new AudioSource[12];
+        for (int i = 0; i < voices.Length; i++) voices[i] = NewVoice(false);
+    }
 
-        growth = Tone("Vuon vai", 150f, 520f, .85f, .22f, false);
-        slash = Tone("Guom sat thu phap", 720f, 110f, .26f, .14f, true);
-        bamboo = Tone("Tre gay gio tan", 310f, 65f, .42f, .48f, true);
-        fire = Tone("Lua rit hoa tuyen", 110f, 48f, .95f, .65f, true);
-        hoof = Tone("Vo sat nang", 68f, 38f, .18f, .42f, true);
-        horseRoar = Tone("Ngua sat hi vang", 320f, 880f, 1.4f, .28f, false);
-        roofCrash = Tone("Mai tranh sap", 90f, 35f, .7f, .75f, true);
-        stoneSmash = Tone("Dap da pha cay", 140f, 45f, .55f, .68f, true);
-        foodPickup = Tone("Thu thap luong thuc", 523.25f, 1046.5f, .35f, .05f, true);
+    private void Start()
+    {
+        if (Region == "forge") forgeMotion = FindAnyObjectByType<GodotEnvironmentMotion>();
+        if (Region != "river") return;
+        Renderer[] scenery=FindObjectsByType<Renderer>();
+        foreach(Renderer renderer in scenery)if(renderer.name.ToLowerInvariant().Contains("dongsong")){riverWater=renderer;break;}
+        if(riverWater!=null)AddSpatial("ambient_water_lap",riverWater.bounds,.17f,14);
+        foreach (Renderer renderer in scenery) {
+            string label = renderer.name.ToLowerInvariant();
+            if (label.Contains("caugo") || label.Contains("walkabledeck")) {
+                if (spatial.Count < 3) AddSpatial("ambient_bridge_creak", renderer.bounds, .09f, 5);
+            }
+            else if (label.Contains("reed") || label.Contains("lausay")) {
+                if (spatial.Count < 5) AddSpatial("ambient_reeds", renderer.bounds, .08f, 7);
+            }
+        }
+        // Imported scenery can combine reeds into the bank mesh; retain one bounded bank layer.
+        if (riverWater != null && spatial.Count < 2) AddSpatial("ambient_reeds", riverWater.bounds, .06f, 9); if (riverWater != null && spatial.Count < 5) AddSpatial("ambient_frogs", riverWater.bounds, .07f, 16);
+    }
 
-        music.clip = BuildEpicVietnameseFolkLoop();
-        music.Play();
+    private AudioSource NewVoice(bool loop)
+    {
+        AudioSource source = gameObject.AddComponent<AudioSource>();
+        source.loop = loop; source.playOnAwake = false; source.spatialBlend = 0; source.dopplerLevel = 0;
+        return source;
+    }
+
+    private AudioClip Clip(string cue)
+    {
+        if (!clips.TryGetValue(cue, out AudioClip clip)) {
+            clip = Resources.Load<AudioClip>("ThanhGiongAudio/" + cue);
+            if (clip == null && LegendProceduralAudio.CanCreate(cue)) {
+                clip = LegendProceduralAudio.Create(cue); generated.Add(clip);
+            }
+            clips[cue] = clip;
+            if (clip == null) Debug.LogWarning("Missing Thánh Gióng audio: " + cue, this);
+        }
+        return clip;
     }
 
     private void Update()
     {
-        ThanhGiongCampaignController campaign = GetComponent<ThanhGiongCampaignController>();
-        if (campaign == null || campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Prologue) return;
-        if ((Input.GetAxisRaw("Horizontal") != 0f || Input.GetAxisRaw("Vertical") != 0f) && Time.time >= nextHoof)
-        {
-            nextHoof = Time.time + (Input.GetKey(KeyCode.LeftShift) ? .22f : .34f);
-            Play(hoof, .48f);
+        bool shouldPause = Time.timeScale <= 0;
+        if (shouldPause != paused) {
+            paused = shouldPause;
+            SetPaused(music); SetPaused(ambience);
+            SetPaused(combatMusic);
+            foreach (SpatialEmitter emitter in spatial) SetPaused(emitter.source);
+            foreach (AudioSource voice in voices) SetPaused(voice);
         }
-    }
-
-    public void PlayGrowth() => Play(growth, .95f);
-    public void PlayFoodPickup() => Play(foodPickup, .85f);
-    public void PlaySlash() => Play(slash, .72f);
-    public void PlayBamboo() => Play(bamboo, .95f);
-    public void PlayFire() => Play(fire, 1f);
-    public void PlayHorseRoar() => Play(horseRoar, 1f);
-    public void PlayRoofCrash() => Play(roofCrash, .88f);
-    public void PlayStoneSmash() => Play(stoneSmash, .9f);
-
-    private void Play(AudioClip clip, float volume)
-    {
-        if (sfx != null && clip != null) sfx.PlayOneShot(clip, volume);
-    }
-
-    private static AudioClip Tone(string name, float startHz, float endHz, float duration, float noise, bool decay)
-    {
-        const int rate = 22050;
-        int count = Mathf.CeilToInt(duration * rate);
-        float[] data = new float[count];
-        uint seed = 192837u;
-        float phase = 0f;
-        for (int i = 0; i < count; i++)
-        {
-            float t = i / (float)count;
-            float hz = Mathf.Lerp(startHz, endHz, t);
-            phase += hz / rate * Mathf.PI * 2f;
-            seed = seed * 1664525u + 1013904223u;
-            float random = ((seed >> 8) & 0xffff) / 32768f - 1f;
-            float envelope = decay ? Mathf.Pow(1f - t, 2.2f) : Mathf.Sin(t * Mathf.PI);
-            data[i] = (Mathf.Sin(phase) * (1f - noise) + random * noise) * envelope * .55f;
+        if (paused) return;
+        age += Time.deltaTime;
+        float fade = Mathf.Clamp01(age / 1.3f);
+        float threat = FindThreat();
+        CombatIntensity = Mathf.Lerp(CombatIntensity, threat, 1 - Mathf.Exp(-Time.deltaTime * (threat > CombatIntensity ? 1.6f : .65f)));
+        music.volume = musicGain * fade * Mathf.Sqrt(1 - CombatIntensity);
+        combatMusic.volume = musicGain * fade * Mathf.Sqrt(CombatIntensity) * .85f;
+        ambience.volume = ambienceGain * fade * Mathf.Lerp(1, .7f, CombatIntensity);
+        SpatialAmbienceGain = 0;
+        foreach (SpatialEmitter emitter in spatial) {
+            emitter.source.transform.position = emitter.area.center;
+            Vector3 closest = emitter.area.ClosestPoint(transform.position);
+            float proximity = Mathf.Clamp01(1 - Vector3.Distance(closest, transform.position) / emitter.radius);
+            emitter.source.volume = emitter.gain * fade * proximity * proximity;
+            SpatialAmbienceGain += emitter.source.volume;
         }
-        AudioClip clip = AudioClip.Create(name, count, 1, rate, false);
-        clip.SetData(data, 0);
-        return clip;
-    }
-
-    private static AudioClip BuildEpicVietnameseFolkLoop()
-    {
-        const int rate = 22050;
-        const float duration = 12f;
-        int count = Mathf.CeilToInt(duration * rate);
-        float[] data = new float[count];
-        // Pentatonic scale (Do, Re, Mi, Sol, La - 220Hz, 247Hz, 277Hz, 330Hz, 370Hz, 440Hz)
-        float[] notes = { 220f, 261.63f, 293.66f, 329.63f, 392f, 440f, 392f, 329.63f, 293.66f, 261.63f, 220f, 329.63f };
-        for (int i = 0; i < count; i++)
-        {
-            float seconds = i / (float)rate;
-            int beat = Mathf.FloorToInt(seconds * 2.5f);
-            float beatT = seconds * 2.5f - beat;
-            float note = notes[beat % notes.Length];
-            // T'rung / Dan day pluck
-            float pluck = Mathf.Sin(seconds * note * Mathf.PI * 2f) * Mathf.Exp(-beatT * 4.8f);
-            // Heavy Battle Drum (Trong tran)
-            float drumPhase = seconds % 1.2f;
-            float drum = Mathf.Sin(seconds * 55f * Mathf.PI * 2f) * Mathf.Exp(-drumPhase * 15f);
-            // Synthwave bass pulse
-            float bass = Mathf.Sin(seconds * 110f * Mathf.PI * 2f) * 0.12f;
-
-            data[i] = pluck * .24f + drum * .32f + bass;
+        if (forgeMotion != null) {
+            float phase = forgeMotion.MotionTime % 1.8f;
+            if (previousForgePhase < 1.08f && phase >= 1.08f) PlayCue("hit_metal", .4f);
+            previousForgePhase = phase;
         }
-        AudioClip clip = AudioClip.Create("Trong tran, T'rung va dan day - Epic Folk", count, 1, rate, false);
-        clip.SetData(data, 0);
-        return clip;
+        if (body == null || movement == null || !movement.enabled || !body.enabled ||
+            (campaign != null && campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Complete)) {
+            hoofClock = 0; return;
+        }
+        Vector3 velocity = movement.WorldVelocity;
+        float speed = new Vector2(velocity.x, velocity.z).magnitude;
+        LastSurface = DetectSurface();
+        UpdateHooves(Time.deltaTime, speed, body.isGrounded, LastSurface);
     }
+
+    private float FindThreat()
+    {
+        if (campaign == null || !campaign.IsBattleActive || campaign.IsDead) return 0;
+        if (Time.time >= enemyRefreshAt) { nearbyEnemies = FindObjectsByType<ThanhGiongEnemy>(); enemyRefreshAt = Time.time + .5f; }
+        float threat = 0;
+        foreach (ThanhGiongEnemy enemy in nearbyEnemies) {
+            if (enemy == null || !enemy.gameObject.activeInHierarchy || enemy.HealthRatio <= 0) continue;
+            float distance = Vector3.Distance(transform.position, enemy.transform.position);
+            threat = Mathf.Max(threat, Mathf.Clamp01((18 - distance) / 12) * (enemy.isBoss ? 1 : .85f));
+        }
+        return threat;
+    }
+
+    private void AddSpatial(string cue, Bounds area, float gain, float radius)
+    {
+        if(spatial.Count>=5)return;
+        GameObject anchor = new GameObject(cue); anchor.transform.SetParent(transform, true); anchor.transform.position = area.center;
+        AudioSource source = anchor.AddComponent<AudioSource>();
+        source.playOnAwake = false; source.loop = true; source.dopplerLevel = 0; source.spatialBlend = .35f;
+        // The listener is on the elevated isometric camera; player-distance gain supplies bank locality.
+        source.rolloffMode = AudioRolloffMode.Linear; source.minDistance = 25; source.maxDistance = 80;
+        source.clip = Clip(cue); source.volume = 0;
+        if (source.clip != null) source.Play();
+        spatial.Add(new SpatialEmitter { source = source, area = area, gain = gain, radius = radius });
+    }
+
+    public void PlaySeed(int index, bool bloom = false)
+    {
+        if (index < 0 || index > 4 || Time.timeScale <= 0) return;
+        SeedCueCount++; PlayCue("seed_" + index, bloom ? .32f : .60f);
+    }
+
+    private void SetPaused(AudioSource source)
+    {
+        if (paused) source.Pause(); else source.UnPause();
+    }
+
+    public void UpdateHooves(float delta, float speed, bool grounded, string surface)
+    {
+        if (paused || !grounded || speed < .45f) { hoofClock = 0; return; }
+        float interval = Mathf.Lerp(.34f, .14f, Mathf.Clamp01((speed - 1f) / 7.5f));
+        hoofClock += delta;
+        if (hoofClock < interval) return;
+        hoofClock %= interval; HoofCount++;
+        PlayCue("hoof_" + (surface == "wood" || surface == "stone" || surface == "wet" ? surface : "dirt"), .56f);
+    }
+
+    public string DetectSurface()
+    {
+        Vector3 origin = transform.position + Vector3.up * .3f;
+        int count = Physics.RaycastNonAlloc(origin, Vector3.down, groundHits, 2.6f, ~0, QueryTriggerInteraction.Ignore);
+        float nearest = float.MaxValue; Transform ground = null;
+        for (int i = 0; i < count; i++) {
+            RaycastHit hit = groundHits[i];
+            if (hit.transform.IsChildOf(transform) || hit.normal.y < .6f || hit.distance >= nearest) continue;
+            nearest = hit.distance; ground = hit.transform;
+        }
+        for (Transform t = ground; t != null; t = t.parent) {
+            string label = t.name.ToLowerInvariant();
+            if (label.Contains("caugo") || label.Contains("walkabledeck") || label.Contains("bridge")) return "wood";
+            if (label.Contains("wet") || label.Contains("shallowwater") || label.Contains("songnong")) return "wet";
+            if (label.Contains("stone") || label.Contains("rock") || label.Contains("da_")) return "stone";
+        }
+        if (Region == "river" && riverWater != null) {
+            Bounds bounds = riverWater.bounds;
+            Vector3 position = transform.position;
+            if (position.x >= bounds.min.x && position.x <= bounds.max.x &&
+                position.z >= bounds.min.z && position.z <= bounds.max.z) return "wet";
+        }
+        return Region == "forge" || Region == "sacred" ? "stone" : "dirt";
+    }
+
+    public void PlayCue(string cue, float gain = 1f)
+    {
+        if (Time.timeScale <= 0 || voices == null) return;
+        AudioClip clip = Clip(cue);
+        if (clip == null) return;
+        LastCue = cue;
+        AudioSource voice = null;
+        // Avoid stealing a weapon/gear impact for routine hoof beats when the bounded pool fills.
+        for (int i = 0; i < voices.Length; i++) { AudioSource candidate = voices[(voiceIndex + i) % voices.Length]; if (!candidate.isPlaying) { voice = candidate; break; } }
+        if (voice == null && cue.StartsWith("hoof_")) return;
+        if (voice == null) voice = voices[voiceIndex % voices.Length]; voiceIndex++;
+        voice.Stop(); voice.clip = clip; voice.pitch = Random.Range(.94f, 1.06f);
+        voice.volume = effectsGain * gain; voice.Play();
+    }
+
+    public void PlayGrowth() => PlayCue("arrival", .95f);
+    public void PlayFoodPickup() => PlayCue("arrival", .55f);
+    public void PlaySlash() => PlayCue("attack_sword", .72f);
+    public void PlayBamboo() => PlayCue("attack_bamboo", .95f);
+    public void PlayFire() => PlayCue("fire");
+    public void PlayHorseRoar() => PlayCue("arrival", .85f);
+    public void PlayRoofCrash() => PlayCue("sword_break", .88f);
+    public void PlayStoneSmash() => PlayCue("hit_metal", .9f);
+    public void PlayEquipment() => PlayCue("metal_equip", .35f);
+    public void PlayImpact(bool bamboo) => PlayCue(bamboo ? "hit_bamboo" : "hit_metal");
+    public void PlayBambooPull() => PlayCue("bamboo_pull");
+    public void PlaySwordBreak() => PlayCue("sword_break");
+
+    private void OnDisable()
+    {
+        if (music != null) music.Stop(); if (ambience != null) ambience.Stop();
+        if (combatMusic != null) combatMusic.Stop();
+        foreach (SpatialEmitter emitter in spatial) if (emitter.source != null) emitter.source.Stop();
+        if (voices != null) foreach (AudioSource voice in voices) if (voice != null) voice.Stop();
+    }
+    private void OnDestroy() { foreach (AudioClip clip in generated) if (clip != null) Destroy(clip); }
 }

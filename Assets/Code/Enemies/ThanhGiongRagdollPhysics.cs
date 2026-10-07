@@ -32,6 +32,18 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
         originalLocalScale = transform.localScale;
     }
 
+    public void ResetForBattle()
+    {
+        StopAllCoroutines();
+        isLaunched = false;
+        if (rb != null) {
+            rb.isKinematic = false;
+            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            rb.linearVelocity = Vector3.zero; rb.angularVelocity = Vector3.zero;
+        }
+        if (col != null) col.enabled = true;
+    }
+
     public void ApplyKnockback(Vector3 impactPoint, Vector3 direction, float force, float upwardLift = 1.4f)
     {
         if (isLaunched || !gameObject.activeInHierarchy) return;

@@ -1,8 +1,10 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(MountedHorseController))]
+[DefaultExecutionOrder(90)]
 public class ThanhGiongCampaignController : MonoBehaviour
 {
     public enum Chapter { Prologue, Preparation, Battle, Ascension, Complete }
@@ -20,6 +22,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
     public float maxHeat = 100f;
     public int swordBreakKills = 7;
     public int victoryKills = 18;
+    public float maxHealth = 100f;
+    public float hurtInvulnerabilitySeconds = .55f;
     [Tooltip("Màn bắt đầu khi scene được mở trực tiếp.")]
     public Chapter startingChapter = Chapter.Prologue;
 
@@ -29,11 +33,16 @@ public class ThanhGiongCampaignController : MonoBehaviour
     public float Heat { get; private set; }
     public int GrowthPhase { get; private set; }
     public int Kills { get; private set; }
-    public bool IsBattleActive => CurrentChapter == Chapter.Battle;
+    public float Health { get; private set; }
+    public float Health01 => Mathf.Clamp01(Health / Mathf.Max(1f, maxHealth));
+    public bool IsDead => Health <= 0f;
+    public bool IsBattleActive => CurrentChapter == Chapter.Battle && !IsDead && !isTransitioning;
     public float FoodProgress => CurrentChapter == Chapter.Prologue ? Mathf.Clamp01(Food / (foodPerGrowth * 3f)) : 1f;
     public float Heat01 => Heat / maxHeat;
     public string CenterMessage { get; private set; }
     public ThanhGiongImprovisedWeapon CarriedWeapon { get; private set; }
+    public int EquipmentStep => qteIndex;
+    public bool EquipmentBusy => mountedMotion != null && mountedMotion.IsBusy;
 
     public string StageTitle => CurrentChapter switch
     {
@@ -84,18 +93,39 @@ public class ThanhGiongCampaignController : MonoBehaviour
     private readonly Collider[] hits = new Collider[128];
     private MountedHorseController movement;
     private ThanhGiongCampaignAudio audioFx;
+    private GodotMountedMotion mountedMotion;
+    private GodotCombatFeedback combatFeedback;
+    private readonly List<GameObject> visualSwords = new List<GameObject>();
+    private readonly List<GameObject> visualBamboo = new List<GameObject>();
+    private readonly HashSet<ThanhGiongEnemy> struckEnemies = new HashSet<ThanhGiongEnemy>();
+    private readonly Dictionary<ThanhGiongEnemy, float> chargeHits = new Dictionary<ThanhGiongEnemy, float>();
     private Vector3 originalScale;
     private float nextAttackTime;
+    private int comboBeat;
+    private float comboUntil;
+    private Coroutine pendingStrike;
+    public int ComboBeat => comboBeat;
+    public bool AttackPending => pendingStrike != null;
     private int qteIndex;
     private int bambooQte;
     private bool isTransitioning;
+    private Coroutine clearMessageRoutine;
+    private float hurtUntil;
+    private Vector3 battleSpawn;
+    private Quaternion battleSpawnRotation;
     private KeyCode[] equipQte = { KeyCode.E, KeyCode.Q, KeyCode.E };
 
     private void Awake()
     {
         movement = GetComponent<MountedHorseController>();
         audioFx = GetComponent<ThanhGiongCampaignAudio>();
+        mountedMotion = GetComponent<GodotMountedMotion>();
+        combatFeedback = GetComponent<GodotCombatFeedback>();
+        if (combatFeedback == null) combatFeedback = gameObject.AddComponent<GodotCombatFeedback>();
         originalScale = transform.localScale;
+        Health = maxHealth;
+        battleSpawn = transform.position;
+        battleSpawnRotation = transform.rotation;
         if (vfx == null) vfx = FindAnyObjectByType<ThanhGiongCampaignVFX>();
         if (hud == null) hud = FindAnyObjectByType<ThanhGiongCampaignHUD>();
         if (hud != null) hud.campaign = this;
@@ -106,9 +136,28 @@ public class ThanhGiongCampaignController : MonoBehaviour
         WarpToChapter(startingChapter);
     }
 
+    private void LateUpdate()
+    {
+        if (visualSwords.Count == 0 && visualBamboo.Count == 0)
+            foreach (Transform child in GetComponentsInChildren<Transform>(true)) {
+                if (child.name == "Weapon_IronSword") visualSwords.Add(child.gameObject);
+                if (child.name == "Weapon_GoldenBamboo") visualBamboo.Add(child.gameObject);
+            }
+        bool available = !EquipmentBusy && !IsDead && CurrentChapter != Chapter.Complete;
+        foreach (GameObject sword in visualSwords) if (sword != null) sword.SetActive(available && CurrentWeapon == Weapon.IronSword);
+        foreach (GameObject bamboo in visualBamboo) if (bamboo != null) bamboo.SetActive(available && CurrentWeapon == Weapon.Bamboo);
+    }
+
     private void Update()
     {
-        if (isTransitioning) return;
+        if (isTransitioning || Time.timeScale <= 0) return;
+        if (IsDead) {
+            if (Input.GetKeyDown(KeyCode.R)) {
+                LegendCheckpoint checkpoint = GetComponent<LegendCheckpoint>();
+                if (checkpoint == null || !checkpoint.RestartCheckpoint()) RestartBattle();
+            }
+            return;
+        }
 
         if (CurrentChapter == Chapter.Prologue) UpdatePrologue();
         else if (CurrentChapter == Chapter.Preparation) UpdateEquipQte();
@@ -163,6 +212,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
             case Chapter.Battle:
                 GrowthPhase = 3;
                 ApplyGrowthScale();
+                battleSpawn = transform.position;
+                battleSpawnRotation = transform.rotation;
                 CurrentWeapon = Weapon.IronSword;
                 Heat = maxHeat * 0.5f;
                 Kills = 0;
@@ -186,6 +237,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
                 break;
         }
 
+        mountedMotion?.SyncEquipment((int)CurrentChapter, qteIndex);
+        mountedMotion?.SetFlying(false);
         audioFx?.PlayGrowth();
         IsometricCameraFollow.Instance?.Shake(0.4f, 0.5f);
     }
@@ -197,6 +250,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
 
     public bool TryCollect(ThanhGiongCollectible item)
     {
+        if (IsDead || Time.timeScale <= 0) return false;
         if (CurrentChapter == Chapter.Prologue && item.kind <= ThanhGiongCollectible.Kind.Meat)
         {
             if (isTransitioning) return false;
@@ -247,7 +301,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (CurrentChapter == Chapter.Battle && CurrentWeapon == Weapon.None && item.kind == ThanhGiongCollectible.Kind.Bamboo)
         {
             bambooQte++;
-            audioFx?.PlayBamboo();
+            audioFx?.PlayBambooPull();
             IsometricCameraFollow.Instance?.Shake(0.35f, 0.6f);
             if (bambooQte >= 3)
             {
@@ -285,7 +339,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (qteIndex < equipQte.Length && Input.GetKeyDown(equipQte[qteIndex]))
         {
             qteIndex++;
-            audioFx?.PlaySlash();
+            if (qteIndex == 1) mountedMotion?.PlayEquipment("equip_armor");
+            if (qteIndex == 2) mountedMotion?.PlayEquipment("equip_helmet");
+            if (qteIndex <= 2) audioFx?.PlayEquipment();
             IsometricCameraFollow.Instance?.Shake(0.25f, 0.4f);
 
             if (qteIndex == 1) ShowMessage("MẶC GIÁP SẮT! (ÁO GIÁP VÀNG SÁNG RỰC) [BƯỚC TIẾP: NHẤN 'Q' ĐỘI NÓN SẮT]", 2.2f);
@@ -303,13 +359,13 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (qteIndex == equipQte.Length && Input.GetKeyDown(KeyCode.F))
         {
             qteIndex = 4;
-            CastFireLine();
             StartCoroutine(CompleteStage2AndTransition());
         }
     }
 
     private void UpdateBattle()
     {
+        UpdateCharge();
         // Check picking up improvised weapons
         if (Input.GetKeyDown(KeyCode.E))
         {
@@ -335,10 +391,26 @@ public class ThanhGiongCampaignController : MonoBehaviour
                 ShowMessage("NÉM VŨ KHÍ MÔI TRƯỜNG!", 1.2f);
                 return;
             }
-            if (Time.time >= nextAttackTime) Attack();
+            TryMeleeAttack();
         }
 
         if (Input.GetKeyDown(KeyCode.F) && Heat >= maxHeat) CastFireLine();
+    }
+
+    private void UpdateCharge()
+    {
+        CharacterController cc = GetComponent<CharacterController>();
+        if (cc == null || !Input.GetKey(KeyCode.LeftShift) || movement.IsDodging || movement.PlanarSpeed < 5f) return;
+        int count = Physics.OverlapSphereNonAlloc(transform.position + Vector3.up * .6f, 2.4f, hits, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++) {
+            ThanhGiongEnemy enemy = hits[i].GetComponentInParent<ThanhGiongEnemy>();
+            if (enemy == null || enemy.HealthRatio <= 0 || !enemy.gameObject.activeInHierarchy) continue;
+            if (chargeHits.TryGetValue(enemy, out float nextHit) && Time.time < nextHit) continue;
+            chargeHits[enemy] = Time.time + 1f;
+            enemy.TakeDamage(12f, .7f, transform.position);
+            combatFeedback?.PlayImpact(enemy.transform, false);
+            audioFx?.PlayImpact(false);
+        }
     }
 
     private void TryPickUpImprovisedWeapon()
@@ -357,37 +429,65 @@ public class ThanhGiongCampaignController : MonoBehaviour
         }
     }
 
+    public bool TryMeleeAttack()
+    {
+        if(!IsBattleActive||Time.timeScale<=0||CurrentWeapon==Weapon.None||EquipmentBusy||movement.IsDodging||Time.time<nextAttackTime)return false;
+        Attack();return true;
+    }
+
     private void Attack()
     {
-        if (CurrentWeapon == Weapon.None) return;
+        if (CurrentWeapon == Weapon.None || movement.IsDodging) return;
+        bool bambooAttack = CurrentWeapon == Weapon.Bamboo;
+        comboBeat=Time.time<=comboUntil?comboBeat%3+1:1;comboUntil=Time.time+1.1f;
+        nextAttackTime=Time.time+(bambooAttack?.68f:.38f);
+        movement.TriggerCampaignAttack(bambooAttack?.58f:.32f);
+        if(pendingStrike!=null)StopCoroutine(pendingStrike);
+        pendingStrike=StartCoroutine(ResolveMeleeStrike(bambooAttack,comboBeat));
+    }
 
-        nextAttackTime = Time.time + (CurrentWeapon == Weapon.Bamboo ? .68f : .38f);
+    private IEnumerator ResolveMeleeStrike(bool bambooAttack,int beat)
+    {
+        float windup=0;
+        while(windup<.12f) {
+            if(!IsBattleActive||movement.IsDodging||EquipmentBusy){pendingStrike=null;yield break;}
+            windup+=Time.deltaTime;yield return null;
+        }
+        while(Time.timeScale<=0)yield return null;
+        if(!IsBattleActive||movement.IsDodging){pendingStrike=null;yield break;}
+        CharacterController cc=GetComponent<CharacterController>();
+        if(cc!=null&&cc.enabled&&cc.isGrounded)cc.Move(transform.forward*(beat==3?.5f:.3f));
         float growthMultiplier = 1f + GrowthPhase * 0.15f;
-        float radius = (CurrentWeapon == Weapon.Bamboo ? 5.8f : 3.4f) * growthMultiplier;
-        float damage = (CurrentWeapon == Weapon.Bamboo ? 52f : 36f) * (1f + GrowthPhase * 0.25f);
+        float radius = (bambooAttack ? 5.8f : 3.4f) * growthMultiplier;
+        float damage = (bambooAttack ? 52f : 36f) * (1f + GrowthPhase * 0.25f)*(beat==3?1.15f:1);
 
-        Vector3 center = CurrentWeapon == Weapon.Bamboo ? transform.position : transform.position + transform.forward * 2.2f;
+        Vector3 center = bambooAttack ? transform.position : transform.position + transform.forward * 2.2f;
         int count = Physics.OverlapSphereNonAlloc(center, radius, hits, ~0, QueryTriggerInteraction.Ignore);
         int struck = 0;
+        struckEnemies.Clear();
 
         for (int i = 0; i < count; i++)
         {
             ThanhGiongEnemy enemy = hits[i].GetComponentInParent<ThanhGiongEnemy>();
-            if (enemy == null || !enemy.gameObject.activeSelf) continue;
-            if (CurrentWeapon == Weapon.IronSword && Vector3.Dot(transform.forward, (enemy.transform.position - transform.position).normalized) < -.15f) continue;
+            if (enemy == null || !enemy.gameObject.activeSelf || enemy.HealthRatio <= 0) continue;
+            if (!bambooAttack && Vector3.Dot(transform.forward, (enemy.transform.position - transform.position).normalized) < -.15f) continue;
+            if (!struckEnemies.Add(enemy)) continue;
 
-            float stunSecs = CurrentWeapon == Weapon.Bamboo ? 1.5f : 0.2f;
+            float stunSecs = bambooAttack ? 1.5f : 0.2f;
             enemy.TakeDamage(damage, stunSecs, transform.position);
+            combatFeedback?.PlayImpact(enemy.transform, bambooAttack);
             struck++;
         }
 
         if (struck > 0)
         {
+            audioFx?.PlayImpact(bambooAttack);
             Heat = Mathf.Min(maxHeat, Heat + struck * 10f);
             IsometricCameraFollow.Instance?.Shake(0.2f, 0.35f);
         }
 
-        if (CurrentWeapon == Weapon.Bamboo)
+        combatFeedback?.PlayAttack(bambooAttack, radius);
+        if (bambooAttack)
         {
             vfx?.PlayBambooSweep(transform, radius);
             audioFx?.PlayBamboo();
@@ -397,6 +497,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
             vfx?.PlayCalligraphySlash(transform, radius);
             audioFx?.PlaySlash();
         }
+        pendingStrike=null;
     }
 
     private void CastFireLine()
@@ -420,6 +521,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
 
     public void NotifyEnemyDefeated(ThanhGiongEnemy enemy)
     {
+        if (IsDead) return;
         Kills++;
         Heat = Mathf.Min(maxHeat, Heat + (enemy.isBoss ? 45f : 15f));
 
@@ -427,8 +529,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         {
             CurrentWeapon = Weapon.None;
             vfx?.PlaySwordBreak(transform);
-            audioFx?.PlayBamboo();
-            audioFx?.PlayStoneSmash();
+            audioFx?.PlaySwordBreak();
             IsometricCameraFollow.Instance?.Shake(0.9f, 1.2f);
 
             if (bambooRoot != null) bambooRoot.SetActive(true);
@@ -441,6 +542,100 @@ public class ThanhGiongCampaignController : MonoBehaviour
         }
     }
 
+    public bool DamagePlayer(float amount, Vector3 source = default)
+    {
+        if (!IsBattleActive || Time.timeScale <= 0 || amount <= 0 || Time.time < hurtUntil || movement.IsDodgeInvulnerable) return false;
+        Health = Mathf.Max(0, Health - amount);
+        hurtUntil = Time.time + Mathf.Max(0, hurtInvulnerabilitySeconds);
+        audioFx?.PlayCue("hurt");
+        combatFeedback?.PlayImpact(transform, false, true);
+        IsometricCameraFollow.Instance?.Shake(.14f, .28f);
+        if (IsDead) {
+            movement.enabled = false;
+            ShowMessage("GIÓNG ĐÃ GỤC NGÃ · NHẤN R ĐỂ THỬ LẠI", 99999f);
+        } else {
+            ShowMessage($"TRÚNG ĐÒN! MÁU {Mathf.RoundToInt(Health)} / {Mathf.RoundToInt(maxHealth)}", 1f);
+            if (source != default) StartCoroutine(HurtPush(source));
+        }
+        return true;
+    }
+
+    public bool HealPlayer(float amount)
+    {
+        if (IsDead || isTransitioning || amount <= 0 || Time.timeScale <= 0) return false;
+        float previous = Health;
+        Health = Mathf.Min(maxHealth, Health + amount);
+        return Health > previous;
+    }
+
+    [System.Serializable]
+    public sealed class CheckpointState
+    {
+        public Chapter chapter; public Weapon weapon;
+        public float food, heat, health;
+        public int growth, kills, qte, bamboo;
+    }
+
+    public CheckpointState CaptureCheckpointState() => new CheckpointState {
+        chapter = CurrentChapter, weapon = CurrentWeapon, food = Food, heat = Heat, health = Health,
+        growth = GrowthPhase, kills = Kills, qte = qteIndex, bamboo = bambooQte
+    };
+
+    public bool RestoreCheckpointState(CheckpointState state, Vector3 position, Quaternion rotation)
+    {
+        if (state == null || EquipmentBusy || ThanhGiongSceneTransition.IsTransitioning) return false;
+        StopAllCoroutines(); clearMessageRoutine = null; pendingStrike=null;comboBeat=0;comboUntil=0;
+        isTransitioning = false; hurtUntil = 0; nextAttackTime = 0; chargeHits.Clear();
+        CurrentChapter = state.chapter; CurrentWeapon = state.weapon;
+        Food = state.food; Heat = state.heat; Health = Mathf.Clamp(state.health, 1, maxHealth);
+        GrowthPhase = state.growth; Kills = state.kills; qteIndex = state.qte; bambooQte = state.bamboo;
+        if (CarriedWeapon != null) { CarriedWeapon.Throw(transform.forward); CarriedWeapon = null; }
+        ApplyGrowthScale(); TeleportPlayer(position); transform.rotation = rotation;
+        movement.enabled = true; movement.ResetMovementState();
+        mountedMotion?.SetFlying(false); mountedMotion?.SyncEquipment((int)CurrentChapter, qteIndex);
+        if (battleRoot != null) battleRoot.SetActive(CurrentChapter == Chapter.Battle);
+        if (bambooRoot != null) bambooRoot.SetActive(CurrentChapter == Chapter.Battle && CurrentWeapon != Weapon.Bamboo);
+        ShowMessage("ĐÃ TRỞ LẠI ĐIỂM DỪNG CHÂN", 2f); hud?.RecallPopups();
+        return true;
+    }
+
+    private IEnumerator HurtPush(Vector3 source)
+    {
+        CharacterController cc = GetComponent<CharacterController>();
+        Vector3 away = transform.position - source; away.y = 0;
+        Vector3 impulse = away.normalized * 7f + Vector3.up * 2f;
+        float elapsed = 0;
+        while (elapsed < .2f && !IsDead && cc != null && cc.enabled) {
+            elapsed += Time.deltaTime;
+            cc.Move(impulse * (1 - Mathf.Clamp01(elapsed / .2f)) * Time.deltaTime);
+            yield return null;
+        }
+    }
+
+    public void RestartBattle()
+    {
+        if (CurrentChapter != Chapter.Battle || isTransitioning) return;
+        StopAllCoroutines(); clearMessageRoutine = null; pendingStrike=null;comboBeat=0;comboUntil=0;
+        Health = maxHealth; hurtUntil = 0; nextAttackTime = 0;
+        Kills = 0; qteIndex = 0; bambooQte = 0;
+        chargeHits.Clear();
+        CurrentWeapon = Weapon.IronSword; Heat = maxHeat * .5f;
+        if (CarriedWeapon != null) { CarriedWeapon.Throw(transform.forward); CarriedWeapon = null; }
+        TeleportPlayer(battleSpawn); transform.rotation = battleSpawnRotation;
+        movement.enabled = true;
+        movement.ResetMovementState();
+        mountedMotion?.SetFlying(false);
+        mountedMotion?.SyncEquipment((int)CurrentChapter, 0);
+        if (bambooRoot != null) bambooRoot.SetActive(true);
+        if (battleRoot != null) {
+            battleRoot.SetActive(true);
+            foreach (ThanhGiongEnemy enemy in battleRoot.GetComponentsInChildren<ThanhGiongEnemy>(true))
+                enemy.ResetForBattle(this, transform);
+        }
+        ShowMessage("TRỞ LẠI CHIẾN TUYẾN · GIÓNG TIẾP CHIẾN!", 3f);
+        hud?.RecallPopups();
+    }
+
     private void UpdateAscensionQte()
     {
         if (isTransitioning) return;
@@ -448,7 +643,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (qteIndex < equipQte.Length && Input.GetKeyDown(equipQte[qteIndex]))
         {
             qteIndex++;
-            audioFx?.PlaySlash();
+            if (qteIndex == 1) mountedMotion?.PlayEquipment("remove_armor");
+            if (qteIndex == 2) mountedMotion?.PlayEquipment("remove_helmet");
+            if (qteIndex <= 2) audioFx?.PlayEquipment();
             IsometricCameraFollow.Instance?.Shake(0.3f, 0.45f);
 
             if (qteIndex == 1) ShowMessage("ĐẶT MẢNH GIÁP THỨ NHẤT XUỐNG ĐỈNH NÚI SÓC... [BƯỚC TIẾP: NHẤN 'Q' ĐẶT NÓN SẮT]", 2.2f);
@@ -481,6 +678,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
     private IEnumerator CompleteStage2AndTransition()
     {
         isTransitioning = true;
+        while (mountedMotion != null && mountedMotion.IsBusy) yield return null;
+        CastFireLine();
         ShowMessage("★ HOÀN THÀNH MÀN 2 ★\nĐÃ TRANG BỊ ĐẦY ĐỦ VŨ KHÍ & NGỰA CHIẾN!\nXUẤT QUÂN RA TIỀN TUYẾN NÚI SÓC ĐỂ CÀN QUÉT GIẶC ÂN...", 3.2f);
         IsometricCameraFollow.Instance?.Shake(0.7f, 0.8f);
         yield return new WaitForSeconds(2.6f);
@@ -510,6 +709,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
 
     private IEnumerator FlyToSky()
     {
+        isTransitioning = true;
+        while (mountedMotion != null && mountedMotion.IsBusy) yield return null;
+        mountedMotion?.SetFlying(true);
         movement.enabled = false;
         Vector3 start = transform.position;
         Vector3 end = ascensionTarget != null ? ascensionTarget.position : start + new Vector3(40f, 55f, 40f);
@@ -564,6 +766,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         ApplyGrowthScale();
         CurrentWeapon = Weapon.None;
         qteIndex = 0;
+        mountedMotion?.SyncEquipment((int)CurrentChapter, qteIndex);
         if (battleRoot != null) battleRoot.SetActive(false);
         if (bambooRoot != null) bambooRoot.SetActive(false);
         ShowMessage("BƯỚC VÀO MÀN 2: RÈN THÉP & XUẤT QUÂN!\n[NHẤN 'E': MẶC ÁO GIÁP VÀNG VUA BAN]", 3.8f);
@@ -572,9 +775,12 @@ public class ThanhGiongCampaignController : MonoBehaviour
     private void BeginBattle()
     {
         CurrentChapter = Chapter.Battle;
+        battleSpawn = transform.position;
+        battleSpawnRotation = transform.rotation;
         GrowthPhase = 3;
         ApplyGrowthScale();
         CurrentWeapon = Weapon.IronSword;
+        mountedMotion?.SyncEquipment((int)CurrentChapter, 0);
         Heat = maxHeat * 0.5f;
         Kills = 0;
         if (battleRoot != null)
@@ -596,6 +802,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if (battleRoot != null) battleRoot.SetActive(false);
         movement.enabled = true;
         qteIndex = 0;
+        mountedMotion?.SyncEquipment((int)CurrentChapter, qteIndex);
         ShowMessage("BƯỚC VÀO MÀN 4: HÓA THÁNH VỀ TRỜI!\n[NHẤN 'E': CỞI MẢNH GIÁP ĐẦU TIÊN ĐẶT LÊN ĐỈNH NÚI SÓC]", 4f);
     }
 
@@ -613,14 +820,15 @@ public class ThanhGiongCampaignController : MonoBehaviour
 
     public void ShowMessage(string message, float duration)
     {
-        StopCoroutine(nameof(ClearMessage));
+        if (clearMessageRoutine != null) StopCoroutine(clearMessageRoutine);
         CenterMessage = message;
-        StartCoroutine(ClearMessage(duration));
+        clearMessageRoutine = StartCoroutine(ClearMessage(duration));
     }
 
     private IEnumerator ClearMessage(float duration)
     {
         yield return new WaitForSeconds(duration);
         CenterMessage = string.Empty;
+        clearMessageRoutine = null;
     }
 }

@@ -31,12 +31,25 @@ public class ThanhGiongSpeedRibbon : MonoBehaviour
         trail.minVertexDistance = .1f;
         trail.widthCurve = new AnimationCurve(new Keyframe(0f, width), new Keyframe(.72f, width*.55f), new Keyframe(1f, 0f));
         trail.colorGradient = Gradient(color);
-        trail.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
-        trail.material.color = color;
+        Shader shader = ResolveTrailShader();
+        if (shader != null)
+        {
+            trail.material = new Material(shader);
+            trail.material.color = color;
+        }
         trail.emitting = false;
         trail.numCornerVertices = 3;
         trail.numCapVertices = 2;
         return trail;
+    }
+
+    private static Shader ResolveTrailShader()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (shader == null) shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Unlit");
+        if (shader == null) shader = Shader.Find("Unlit/Color");
+        return shader;
     }
 
     private static Gradient Gradient(Color head)

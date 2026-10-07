@@ -43,15 +43,19 @@ public class ThanhGiongEnemy : MonoBehaviour
     public EnemyState CurrentState { get; private set; } = EnemyState.Idle;
     public bool IsStuckInGround => CurrentState == EnemyState.StuckInGround;
     public bool IsStunned => Time.time < stunnedUntil || CurrentState == EnemyState.Stunned;
+    public bool IsRooted => Time.time < rootedUntil;
     public float HealthRatio => Mathf.Clamp01(health / maxHealth);
     public Rigidbody Body => rb;
 
     private float health;
     private float stunnedUntil;
+    private float rootedUntil;
     private Transform target;
     private Transform focusTarget;
     private ThanhGiongCampaignController campaign;
     private Vector3 initialScale;
+    private Vector3 initialPosition;
+    private Quaternion initialRotation;
 
     private Rigidbody rb;
     private CapsuleCollider col;
@@ -73,6 +77,13 @@ public class ThanhGiongEnemy : MonoBehaviour
     private float currentBankAngle;
     private float enemyGaitTime;
     private float flinchTimer;
+    private float visualSpeedBlend;
+    private float visualSpeedBlendVel;
+    private float attackPoseBlend;
+    private float stuckPoseBlend;
+    private float stunnedPoseBlend;
+    private Vector3 visualPoseVelocity;
+    private Vector3 visualScaleVelocity;
     private Vector3 formationOffset;
     private int formationSlot = -1;
     private static int nextFormationSlot;
@@ -83,6 +94,8 @@ public class ThanhGiongEnemy : MonoBehaviour
     private void Awake()
     {
         initialScale = transform.localScale;
+        initialPosition = transform.position;
+        initialRotation = transform.rotation;
         if (isBoss)
         {
             maxHealth = 480f;
@@ -154,11 +167,19 @@ public class ThanhGiongEnemy : MonoBehaviour
         ResolveIronHorseTarget();
         health = maxHealth;
         stunnedUntil = 0f;
+        rootedUntil = 0f;
         CurrentState = EnemyState.Idle;
         nextHeavyAttackTime = Time.time + Random.Range(1.5f, 3.0f);
         nextMinionAttackTime = Time.time + Random.Range(0.5f, 1.5f);
         smoothedPlanarVelocity = Vector3.zero;
         velocityDamp = Vector3.zero;
+        visualSpeedBlend = 0f;
+        visualSpeedBlendVel = 0f;
+        attackPoseBlend = 0f;
+        stuckPoseBlend = 0f;
+        stunnedPoseBlend = 0f;
+        visualPoseVelocity = Vector3.zero;
+        visualScaleVelocity = Vector3.zero;
 
         if (rb != null)
         {
@@ -186,6 +207,26 @@ public class ThanhGiongEnemy : MonoBehaviour
         CurrentState = EnemyState.Chasing;
     }
 
+    public void ResetForBattle(ThanhGiongCampaignController owner, Transform player)
+    {
+        StopAllCoroutines();
+        if (ragdoll != null) ragdoll.ResetForBattle();
+        gameObject.SetActive(false); // Restores original dissolve materials and clears telegraphs.
+        transform.SetPositionAndRotation(initialPosition, initialRotation);
+        transform.localScale = isBoss ? initialScale * 1.8f : initialScale;
+        if (col != null) col.enabled = true;
+        stateTimer = 0; flinchTimer = 0; enemyGaitTime = 0;
+        visualSpeedBlend = 0f; visualSpeedBlendVel = 0f; attackPoseBlend = 0f; stuckPoseBlend = 0f; stunnedPoseBlend = 0f;
+        visualPoseVelocity = Vector3.zero; visualScaleVelocity = Vector3.zero;
+        foreach (ParticleSystem particles in GetComponentsInChildren<ParticleSystem>(true)) {
+            var main = particles.main; main.playOnAwake = false;
+            particles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+        campaign = owner; target = player;
+        gameObject.SetActive(true);
+        Initialize(owner, player);
+    }
+
     private void Update()
     {
         if (target == null || focusTarget == null) ResolveIronHorseTarget();
@@ -197,11 +238,20 @@ public class ThanhGiongEnemy : MonoBehaviour
     {
         if (visualModel == null || visualModel == transform || CurrentState == EnemyState.Dead) return;
 
+        float dt = Mathf.Max(Time.deltaTime, 0.0001f);
+        Vector3 planarVelocity = rb != null ? new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z) : Vector3.zero;
+        float speed = planarVelocity.magnitude;
+        float desiredSpeedBlend = CurrentState == EnemyState.Chasing ? Mathf.Clamp01(speed / Mathf.Max(moveSpeed, 0.01f)) : 0f;
+        visualSpeedBlend = Mathf.SmoothDamp(visualSpeedBlend, desiredSpeedBlend, ref visualSpeedBlendVel, CurrentState == EnemyState.Chasing ? 0.16f : 0.24f, 8f, dt);
+
         // Dynamic turn banking calculation (Understory predator steering feel)
-        float yawDelta = Mathf.DeltaAngle(previousYaw, transform.eulerAngles.y) / Mathf.Max(Time.deltaTime, 0.001f);
+        float yawDelta = Mathf.DeltaAngle(previousYaw, transform.eulerAngles.y) / dt;
         previousYaw = transform.eulerAngles.y;
-        float targetBank = -Mathf.Clamp(yawDelta * 0.28f, -12f, 12f);
-        currentBankAngle = Mathf.Lerp(currentBankAngle, targetBank, 1f - Mathf.Exp(-8f * Time.deltaTime));
+        float targetBank = -Mathf.Clamp(yawDelta * 0.22f, -10f, 10f) * Mathf.Lerp(.35f, 1f, visualSpeedBlend);
+        currentBankAngle = Mathf.Lerp(currentBankAngle, targetBank, 1f - Mathf.Exp(-9f * dt));
+        attackPoseBlend = Mathf.MoveTowards(attackPoseBlend, CurrentState == EnemyState.TelegraphingAttack || CurrentState == EnemyState.Slamming ? 1f : 0f, dt * 5.5f);
+        stuckPoseBlend = Mathf.MoveTowards(stuckPoseBlend, CurrentState == EnemyState.StuckInGround || CurrentState == EnemyState.Recovering ? 1f : 0f, dt * 4f);
+        stunnedPoseBlend = Mathf.MoveTowards(stunnedPoseBlend, CurrentState == EnemyState.Stunned ? 1f : 0f, dt * 5f);
 
         Vector3 targetPos = visualBaseLocalPos;
         Quaternion targetRot = visualBaseLocalRot;
@@ -227,76 +277,80 @@ public class ThanhGiongEnemy : MonoBehaviour
                 break;
 
             case EnemyState.Chasing:
-                float speed = rb != null ? new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z).magnitude : moveSpeed;
-                float speedRatio = Mathf.Clamp01(speed / Mathf.Max(moveSpeed, 0.01f));
-                enemyGaitTime += Time.deltaTime * (isBoss ? 5.2f : 7.4f) * (0.35f + speedRatio * 0.65f);
+                enemyGaitTime += dt * (isBoss ? 5.2f : 7.4f) * (0.35f + visualSpeedBlend * 0.65f);
 
                 float wave = Mathf.Sin(enemyGaitTime);
                 float doubleWave = Mathf.Sin(enemyGaitTime * 2f);
+                float footPlant = Mathf.Pow(Mathf.Abs(wave), 0.65f);
+                float stepLift = Mathf.Max(0f, Mathf.Sin(enemyGaitTime + Mathf.PI * .22f));
 
                 // Heavy footstep vertical bob
-                float stepBob = Mathf.Abs(wave) * (isBoss ? 0.095f : 0.055f);
-                targetPos.y += stepBob;
+                float stepBob = footPlant * (isBoss ? 0.085f : 0.052f) * visualSpeedBlend;
+                targetPos.y += stepBob + stepLift * (isBoss ? 0.018f : 0.026f) * visualSpeedBlend;
+                if (planarVelocity.sqrMagnitude > .01f && visualModel.parent != null)
+                    targetPos += visualModel.parent.InverseTransformDirection(planarVelocity.normalized) * (Mathf.Sin(enemyGaitTime + Mathf.PI) * .035f * visualSpeedBlend);
 
                 // Predatory forward lean while hunting
-                float forwardPitch = (isBoss ? 10f : 13f) * speedRatio;
+                float forwardPitch = (isBoss ? 9f : 12f) * visualSpeedBlend;
 
                 // Heavy waddle sway (boss steps side to side with immense mass)
-                float waddleRoll = wave * (isBoss ? 6.8f : 3.5f);
+                float waddleRoll = wave * (isBoss ? 6.2f : 3.2f) * visualSpeedBlend;
 
                 targetRot *= Quaternion.Euler(
                     forwardPitch + doubleWave * 2.2f,
-                    0f,
+                    Mathf.Sin(enemyGaitTime * .5f) * (isBoss ? 1.4f : 2.1f) * visualSpeedBlend,
                     waddleRoll + currentBankAngle
                 );
 
                 targetScale = new Vector3(
-                    visualBaseScale.x * (1f + wave * 0.02f),
-                    visualBaseScale.y * (1f - wave * 0.025f),
-                    visualBaseScale.z * (1f + speedRatio * 0.035f)
+                    visualBaseScale.x * (1f + wave * 0.018f * visualSpeedBlend),
+                    visualBaseScale.y * (1f - footPlant * 0.022f * visualSpeedBlend),
+                    visualBaseScale.z * (1f + visualSpeedBlend * 0.032f)
                 );
                 break;
 
             case EnemyState.TelegraphingAttack:
-                float tense = Mathf.Sin(Time.time * 42f) * 0.03f;
-                targetPos += Vector3.up * 0.42f + new Vector3(tense, 0f, tense);
-                targetRot *= Quaternion.Euler(-26f, 0f, tense * 20f);
-                targetScale = new Vector3(visualBaseScale.x * 1.05f, visualBaseScale.y * 1.08f, visualBaseScale.z * 0.95f);
+                float tense = Mathf.Sin(Time.time * 42f) * 0.03f * attackPoseBlend;
+                targetPos += Vector3.up * (0.18f + 0.24f * attackPoseBlend) + new Vector3(tense, 0f, tense);
+                targetRot *= Quaternion.Euler(-26f * attackPoseBlend, 0f, tense * 20f);
+                targetScale = new Vector3(visualBaseScale.x * (1f + .05f * attackPoseBlend), visualBaseScale.y * (1f + .08f * attackPoseBlend), visualBaseScale.z * (1f - .05f * attackPoseBlend));
                 break;
 
             case EnemyState.Slamming:
-                targetRot *= Quaternion.Euler(42f, 0f, 0f);
+                targetPos += Vector3.down * .08f;
+                targetRot *= Quaternion.Euler(42f * attackPoseBlend, 0f, 0f);
                 targetScale = new Vector3(visualBaseScale.x * 1.08f, visualBaseScale.y * 0.88f, visualBaseScale.z * 1.12f);
                 break;
 
             case EnemyState.StuckInGround:
                 // Struggling to yank the weapon out (Understory mudLodge)
                 float struggle = Mathf.Sin(Time.time * 36f) * (isBoss ? 0.08f : 0.05f);
-                targetPos += new Vector3(struggle, 0f, Mathf.Cos(Time.time * 28f) * struggle * 0.5f);
-                targetRot *= Quaternion.Euler(38f + Mathf.Sin(Time.time * 16f) * 4f, 0f, struggle * 32f);
+                targetPos += new Vector3(struggle, 0f, Mathf.Cos(Time.time * 28f) * struggle * 0.5f) * stuckPoseBlend;
+                targetRot *= Quaternion.Euler((38f + Mathf.Sin(Time.time * 16f) * 4f) * stuckPoseBlend, 0f, struggle * 32f * stuckPoseBlend);
                 break;
 
             case EnemyState.Recovering:
-                targetPos += Vector3.up * 0.15f - transform.forward * 0.2f;
-                targetRot *= Quaternion.Euler(-14f, 0f, 0f);
+                targetPos += (Vector3.up * 0.15f - transform.forward * 0.2f) * stuckPoseBlend;
+                targetRot *= Quaternion.Euler(-14f * stuckPoseBlend, 0f, 0f);
                 break;
 
             case EnemyState.Stunned:
                 float dizzy = Time.time * 4.5f;
-                targetPos.y += Mathf.Sin(dizzy) * 0.035f;
-                targetRot *= Quaternion.Euler(Mathf.Sin(dizzy) * 14f, Mathf.Cos(dizzy * 0.5f) * 18f, Mathf.Sin(dizzy * 1.4f) * 10f);
+                targetPos.y += Mathf.Sin(dizzy) * 0.035f * stunnedPoseBlend;
+                targetRot *= Quaternion.Euler(Mathf.Sin(dizzy) * 14f * stunnedPoseBlend, Mathf.Cos(dizzy * 0.5f) * 18f * stunnedPoseBlend, Mathf.Sin(dizzy * 1.4f) * 10f * stunnedPoseBlend);
                 break;
         }
 
-        float damping = 1f - Mathf.Exp(-18f * Time.deltaTime);
-        visualModel.localPosition = Vector3.Lerp(visualModel.localPosition, targetPos, damping);
-        visualModel.localRotation = Quaternion.Slerp(visualModel.localRotation, targetRot, damping);
-        visualModel.localScale = Vector3.Lerp(visualModel.localScale, targetScale, damping);
+        float damping = CurrentState == EnemyState.Chasing ? .085f : .055f;
+        visualModel.localPosition = Vector3.SmoothDamp(visualModel.localPosition, targetPos, ref visualPoseVelocity, damping, 12f, dt);
+        visualModel.localRotation = Quaternion.Slerp(visualModel.localRotation, targetRot, 1f - Mathf.Exp(-20f * dt));
+        visualModel.localScale = Vector3.SmoothDamp(visualModel.localScale, targetScale, ref visualScaleVelocity, .07f, 10f, dt);
     }
 
     private void FixedUpdate()
     {
         if (health <= 0f || CurrentState == EnemyState.Dead) return;
+        if (IsRooted) { if (rb != null) SmoothVelocity(Vector3.zero); return; }
 
         if (Time.time < stunnedUntil)
         {
@@ -306,6 +360,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
         if (target == null || (campaign != null && !campaign.IsBattleActive))
         {
+            if (rb != null) SmoothVelocity(Vector3.zero);
             CurrentState = EnemyState.Idle;
             return;
         }
@@ -515,7 +570,7 @@ public class ThanhGiongEnemy : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < telegraphDuration)
         {
-            if (health <= 0f || Time.time < stunnedUntil)
+            if (health <= 0f || Time.time < stunnedUntil || campaign == null || !campaign.IsBattleActive)
             {
                 DestroyWarningRing();
                 ResetVisualPose();
@@ -550,11 +605,14 @@ public class ThanhGiongEnemy : MonoBehaviour
         IsometricCameraFollow.Instance?.Shake(0.7f, 0.45f);
 
         // Check if player is caught in slam
-        float distanceToPlayer = Vector3.Distance(target.position, slamTargetPos);
+        Vector3 slamOffset = target.position - slamTargetPos;
+        slamOffset.y = 0;
+        float distanceToPlayer = slamOffset.magnitude;
         bool hitPlayer = distanceToPlayer <= slamRadius;
 
         if (hitPlayer)
         {
+            campaign?.DamagePlayer(slamDamage, transform.position);
             // Player hit! Boss knocks player back and swiftly recovers
             Vector3 pushDir = (target.position - slamTargetPos).normalized;
             if (pushDir.sqrMagnitude < 0.01f) pushDir = transform.forward;
@@ -565,7 +623,6 @@ public class ThanhGiongEnemy : MonoBehaviour
                 targetBody.AddForce(pushDir * 18f + Vector3.up * 4f, ForceMode.Impulse);
             }
 
-            campaign?.ShowMessage("CẢNH BÁO: TRÚNG ĐẠI ĐAO CỦA TƯỚNG GIẶC!", 1.5f);
 
             yield return new WaitForSeconds(0.4f);
             ResetVisualPose();
@@ -619,6 +676,9 @@ public class ThanhGiongEnemy : MonoBehaviour
         }
 
         yield return new WaitForSeconds(0.22f);
+        if (health > 0f && Time.time >= stunnedUntil && target != null && campaign != null &&
+            campaign.IsBattleActive && Vector3.Distance(target.position, transform.position) < 3f)
+            campaign.DamagePlayer(8f, transform.position);
         ResetVisualPose();
         if (health > 0f && Time.time >= stunnedUntil) CurrentState = EnemyState.Chasing;
     }
@@ -645,6 +705,8 @@ public class ThanhGiongEnemy : MonoBehaviour
             visualModel.localPosition = visualBaseLocalPos;
             visualModel.localRotation = visualBaseLocalRot;
             visualModel.localScale = visualBaseScale;
+            visualPoseVelocity = Vector3.zero;
+            visualScaleVelocity = Vector3.zero;
         }
     }
 
@@ -804,6 +866,28 @@ public class ThanhGiongEnemy : MonoBehaviour
 
     #endregion
 
+    public void ApplyRoot(float seconds)
+    {
+        if (seconds <= 0 || health <= 0 || !gameObject.activeInHierarchy || Time.timeScale <= 0) return;
+        rootedUntil = Mathf.Max(rootedUntil, Time.time + seconds);
+        smoothedPlanarVelocity = Vector3.zero; velocityDamp = Vector3.zero;
+        visualSpeedBlend = 0f; visualSpeedBlendVel = 0f;
+        if (rb != null && !rb.isKinematic) rb.linearVelocity = new Vector3(0, rb.linearVelocity.y, 0);
+    }
+
+    public void RestoreCheckpoint(ThanhGiongCampaignController owner, Transform player, Vector3 position, Quaternion rotation, float savedHealth, bool alive)
+    {
+        ResetForBattle(owner, player);
+        transform.SetPositionAndRotation(position, rotation);
+        if(rb!=null){rb.position=position;rb.rotation=rotation;}
+        health = Mathf.Clamp(savedHealth, 0, maxHealth);
+        stunnedUntil = 0f;
+        rootedUntil = 0f;
+        flinchTimer = 0f;
+        CurrentState = alive && health > 0 ? EnemyState.Chasing : EnemyState.Dead;
+        gameObject.SetActive(alive && health > 0);
+    }
+
     public void TakeDamage(float amount, float stunSeconds = 0f, Vector3 hitSource = default)
     {
         if (!gameObject.activeSelf || health <= 0f) return;
@@ -821,7 +905,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
         health -= actualDamage;
         stunnedUntil = Mathf.Max(stunnedUntil, Time.time + stunSeconds);
-        flinchTimer = 0.16f;
+        flinchTimer = Mathf.Max(flinchTimer, isBoss ? 0.18f : 0.22f);
         transform.localScale = (isBoss ? initialScale * 1.8f : initialScale) * 1.05f;
 
         Vector3 source = hitSource != default ? hitSource : (target != null ? target.position : transform.position - transform.forward);

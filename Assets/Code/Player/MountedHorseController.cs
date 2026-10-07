@@ -1,8 +1,9 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(CharacterController))]
+[DefaultExecutionOrder(-20)]
 public class MountedHorseController : MonoBehaviour
 {
     [Header("Movement")]
@@ -15,6 +16,12 @@ public class MountedHorseController : MonoBehaviour
     public float jumpBufferTime = 0.12f;
     public float accelerationTime = 0.18f;
     public float decelerationTime = 0.24f;
+
+    [Header("Mounted dodge (C)")]
+    public float dodgeDuration = .38f;
+    public float dodgeDistance = 4f;
+    public float dodgeCooldown = 1f;
+    public float dodgeInvulnerability = .24f;
 
     [Header("Procedural horse animation")]
     public Transform visual;
@@ -69,12 +76,34 @@ public class MountedHorseController : MonoBehaviour
     private float currentBankAngle;
     private float prevForwardSpeed;
     private float currentPitchAccel;
+    private GodotMountedMotion godotMotion;
+    private ThanhGiongCampaignController campaignController;
+    private Coroutine attackSlash;
+    private GameObject activeSlash;
+    private float dodgeTimer, nextDodgeTime, recentDirectionTime = -10f;
+    private Vector3 dodgeDirection, recentDirection;
+    private Vector3 frameVelocity;
+
+    public bool IsDodging => dodgeTimer > 0f;
+    public float DodgeRemaining => Mathf.Max(0, dodgeTimer);
+    public float DodgeCooldownRemaining => Mathf.Max(0, nextDodgeTime - Time.time);
+    public float DodgeProgress => IsDodging ? Mathf.Clamp01(1f - dodgeTimer / Mathf.Max(dodgeDuration, .01f)) : 1f;
+    public bool IsDodgeInvulnerable => IsDodging && dodgeDuration - dodgeTimer < Mathf.Clamp(dodgeInvulnerability, 0, dodgeDuration);
+    public float DodgeLateral => IsDodging ? Vector3.Dot(dodgeDirection, transform.right) : 0f;
+    public event System.Action<Vector3> DodgeStarted;
 
     private bool IsAttacking => attackTimer > 0f;
+    public float AttackProgress => IsAttacking ? Mathf.Clamp01(1f - attackTimer / Mathf.Max(attackDuration, .001f)) : -1f;
+    public Vector3 WorldVelocity => frameVelocity;
+    public float PlanarSpeed => new Vector3(frameVelocity.x, 0f, frameVelocity.z).magnitude;
+    public float VerticalSpeed => verticalVelocity;
+    public bool Grounded => controller != null && controller.isGrounded;
 
     private void Awake()
     {
         controller = GetComponent<CharacterController>();
+        godotMotion = GetComponent<GodotMountedMotion>();
+        campaignController = GetComponent<ThanhGiongCampaignController>();
         gameplayCamera = Camera.main;
         if (visual == null)
         {
@@ -149,22 +178,33 @@ public class MountedHorseController : MonoBehaviour
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0))
+        if (Time.deltaTime <= 0f) return;
+        bool equipmentBusy = godotMotion != null && godotMotion.IsBusy;
+        Vector2 input = equipmentBusy ? Vector2.zero : new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+        Vector3 move = CameraRelativeDirection(input);
+        if (move.sqrMagnitude > .01f) { recentDirection = move; recentDirectionTime = Time.time; }
+        if (Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.LeftAlt) || Input.GetKeyDown(KeyCode.LeftControl)) TryDodge(move);
+        if (!equipmentBusy && campaignController == null && Input.GetMouseButtonDown(0))
             TryAttack();
 
-        if (Input.GetKeyDown(KeyCode.Space))
+        if (!equipmentBusy && Input.GetKeyDown(KeyCode.Space))
             RequestJump();
 
-        Vector2 input = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-        Vector3 move = CameraRelativeDirection(input);
         bool running = Input.GetKey(KeyCode.LeftShift);
         float speed = running ? runSpeed : walkSpeed;
         if (IsAttacking) speed *= 0.25f;
         Vector3 desiredPlanarVelocity = move * speed;
         float smoothing = desiredPlanarVelocity.sqrMagnitude > planarVelocity.sqrMagnitude ? accelerationTime : decelerationTime;
-        planarVelocity = Vector3.SmoothDamp(planarVelocity, desiredPlanarVelocity, ref planarVelocityDamp, smoothing, 35f, Time.deltaTime);
+        bool dodgeFrame = IsDodging;
+        if (dodgeFrame)
+        {
+            float step = Mathf.Min(Time.deltaTime, dodgeTimer);
+            planarVelocity = dodgeDirection * (dodgeDistance / Mathf.Max(dodgeDuration, .01f)) * (step / Time.deltaTime);
+            planarVelocityDamp = Vector3.zero;
+        }
+        else planarVelocity = Vector3.SmoothDamp(planarVelocity, desiredPlanarVelocity, ref planarVelocityDamp, smoothing, 35f, Time.deltaTime);
 
-        if (planarVelocity.sqrMagnitude > 0.025f)
+        if (!dodgeFrame && planarVelocity.sqrMagnitude > 0.025f)
         {
             Quaternion target = Quaternion.LookRotation(planarVelocity.normalized, Vector3.up);
             transform.rotation = Quaternion.Slerp(transform.rotation, target, 1f - Mathf.Exp(-turnSpeed * Time.deltaTime));
@@ -178,13 +218,23 @@ public class MountedHorseController : MonoBehaviour
 
         bool bufferedJump = Time.time - jumpPressedTime <= jumpBufferTime;
         bool canUseGroundJump = Time.time - lastGroundedTime <= coyoteTime;
-        if (bufferedJump && canUseGroundJump && !IsAttacking)
+        if (bufferedJump && canUseGroundJump && !IsAttacking && !equipmentBusy && !dodgeFrame)
         {
             ExecuteJump();
         }
         verticalVelocity += gravity * Time.deltaTime;
-        controller.Move((planarVelocity + Vector3.up * verticalVelocity) * Time.deltaTime);
-        float travelSpeed = new Vector3(controller.velocity.x, 0f, controller.velocity.z).magnitude;
+        Vector3 displacement = (planarVelocity + Vector3.up * verticalVelocity) * Time.deltaTime;
+        Vector3 frameStart = transform.position;
+        // CharacterController sweeps each segment; a low frame rate cannot jump across a thin wall.
+        int segments = dodgeFrame ? Mathf.Max(1, Mathf.CeilToInt(displacement.magnitude / .35f)) : 1;
+        for (int i = 0; i < segments; i++) controller.Move(displacement / segments);
+        frameVelocity = (transform.position - frameStart) / Time.deltaTime;
+        if (dodgeFrame)
+        {
+            dodgeTimer = Mathf.Max(0, dodgeTimer - Time.deltaTime);
+            if (!IsDodging) { planarVelocity = Vector3.zero; planarVelocityDamp = Vector3.zero; }
+        }
+        float travelSpeed = PlanarSpeed;
         float speed01 = Mathf.Clamp01(travelSpeed / Mathf.Max(runSpeed, .01f));
         // Advance the hoof cycle by ground covered, so acceleration and
         // release of WASD cannot leave the legs cycling at a fixed rate.
@@ -223,6 +273,7 @@ public class MountedHorseController : MonoBehaviour
     private void AnimateVisual(float movementAmount, bool running)
     {
         if (visual == null) return;
+        if (godotMotion != null && godotMotion.IsRigReady) return;
 
         // Modular Horse_Controller already supplies body bounce, four-leg gait
         // and rearing. A second procedural transform on the shared Visual root
@@ -390,7 +441,7 @@ public class MountedHorseController : MonoBehaviour
             foreach (GeneratedCharacterMotion motion in generatedMotions)
                 if (motion != null && motion.kind == GeneratedCharacterMotion.CharacterKind.ThanhGiong)
                     motion.TriggerAttack(attackDuration);
-        StartCoroutine(ShowAttackSlash());
+        if (campaignController == null) attackSlash = StartCoroutine(ShowAttackSlash());
         if (modularHero != null) modularHero.TriggerBambooAttack();
         else if (mountedAnimator != null && animatorHasAttack) mountedAnimator.SetTrigger(AttackHash);
         modularHorse?.TriggerRearing();
@@ -413,16 +464,70 @@ public class MountedHorseController : MonoBehaviour
 
     public bool TryAttack()
     {
+        if (Time.timeScale <= 0f) return false;
+        if (IsDodging) return false;
+        if (campaignController != null && (!campaignController.IsBattleActive || campaignController.CurrentWeapon == ThanhGiongCampaignController.Weapon.None)) return false;
+        if (godotMotion != null && godotMotion.IsBusy) return false;
         if (Time.time < nextAttackTime) return false;
         BeginAttack();
         return true;
     }
 
+    // Campaign owns its weapon cooldown and damage; this starts the matching pose once accepted.
+    public void TriggerCampaignAttack(float duration)
+    {
+        if (Time.timeScale <= 0f || IsDodging || godotMotion != null && godotMotion.IsBusy) return;
+        attackDuration = Mathf.Max(duration, .1f);
+        BeginAttack();
+    }
+
+    public void ResetMovementState()
+    {
+        planarVelocity = Vector3.zero;
+        frameVelocity = Vector3.zero;
+        planarVelocityDamp = Vector3.zero;
+        verticalVelocity = 0f;
+        attackTimer = nextAttackTime = 0f;
+        dodgeTimer = nextDodgeTime = 0f;
+        recentDirectionTime = -10f;
+        jumpPressedTime = lastGroundedTime = -10f;
+        if (attackSlash != null) { StopCoroutine(attackSlash); attackSlash = null; }
+        ClearActiveSlash();
+    }
+
+    private void ClearActiveSlash()
+    {
+        if (activeSlash == null) return;
+        foreach (LineRenderer line in activeSlash.GetComponentsInChildren<LineRenderer>())
+            if (line.sharedMaterial != null) Destroy(line.sharedMaterial);
+        Destroy(activeSlash);
+        activeSlash = null;
+    }
+
     public void RequestJump()
     {
+        if (Time.timeScale <= 0f) return;
+        if (IsDodging) return;
+        if (godotMotion != null && godotMotion.IsBusy) return;
         jumpPressedTime = Time.time;
         if (controller != null && controller.isGrounded && !IsAttacking)
             ExecuteJump();
+    }
+
+    public bool TryDodge(Vector3 worldDirection)
+    {
+        if (!enabled || Time.timeScale <= 0f || controller == null || !controller.enabled || !controller.isGrounded ||
+            IsDodging || IsAttacking || Time.time < nextDodgeTime || godotMotion != null && (godotMotion.IsBusy || godotMotion.flying) ||
+            campaignController != null && (campaignController.IsDead || campaignController.CurrentChapter == ThanhGiongCampaignController.Chapter.Complete)) return false;
+        worldDirection.y = 0;
+        if (worldDirection.sqrMagnitude < .01f) worldDirection = Time.time - recentDirectionTime < .25f ? recentDirection : transform.forward;
+        dodgeDirection = worldDirection.normalized;
+        dodgeTimer = Mathf.Max(.05f, dodgeDuration);
+        nextDodgeTime = Time.time + Mathf.Max(dodgeCooldown, dodgeDuration);
+        jumpPressedTime = -10f;
+        planarVelocityDamp = Vector3.zero;
+        DodgeStarted?.Invoke(dodgeDirection);
+        return true;
     }
 
     private void ExecuteJump()
@@ -440,6 +545,7 @@ public class MountedHorseController : MonoBehaviour
         // Reveal the sweep during the strike, after the bamboo wind-up.
         yield return new WaitForSeconds(attackDuration * .32f);
         GameObject slash = new GameObject("Golden Bamboo Sweep VFX");
+        activeSlash = slash;
         slash.transform.SetParent(transform, false);
         Vector3 bambooTip = bambooWeapon != null && bambooWeapon.gameObject.activeInHierarchy
             ? transform.InverseTransformPoint(bambooWeapon.TransformPoint(new Vector3(0f, 1.02f, 0f)))
@@ -499,10 +605,11 @@ public class MountedHorseController : MonoBehaviour
         }
         if (!hitApplied) ApplyAttackHit();
 
-        Destroy(coreLine.material);
-        Destroy(edgeLine.material);
-        Destroy(slash);
+        ClearActiveSlash();
+        attackSlash = null;
     }
+
+    private void OnDestroy() { ClearActiveSlash(); }
 
     private void OnControllerColliderHit(ControllerColliderHit hit)
     {
