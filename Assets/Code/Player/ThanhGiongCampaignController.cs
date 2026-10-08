@@ -980,6 +980,8 @@ public class ThanhGiongCampaignController : MonoBehaviour
         mountedMotion?.SetFlying(true);
         audioFx?.PlayAscensionMusic();
         movement.enabled = false;
+        AscensionCloudTrail cloudTrail = GetComponent<AscensionCloudTrail>();
+        cloudTrail?.BeginAscent();
         Vector3 start = transform.position;
         Vector3 end = ascensionTarget != null ? ascensionTarget.position : start + new Vector3(40f, 55f, 40f);
 
@@ -997,6 +999,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
             // Smooth ascent curve
             transform.position = Vector3.Lerp(start, end, t * t * (3f - 2f * t));
             transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation((end - start).normalized), Time.deltaTime * 2.5f);
+            cloudTrail?.FollowHorse(transform.position, transform.rotation);
 
             // Periodically drop fire sparks and create lakes below
             if (time > 1.2f && time < 6.5f)
@@ -1021,6 +1024,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
             yield return null;
         }
 
+        cloudTrail?.EndAscent();
         CurrentChapter = Chapter.Complete;
         ShowMessage("THÁNH GIÓNG · HÓA THÁNH VỀ TRỜI · TRUYỀN THUYẾT & DI SẢN BẤT TỬ", 999f);
     }

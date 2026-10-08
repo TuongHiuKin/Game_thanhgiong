@@ -232,7 +232,6 @@ public static class KayKitWorldMapBuilder
         ScatterForest(world.transform, 43f, 42, 1901);
         // Unnecessary dummy character placement removed
         // PlaceVillagers(world.transform, 8, 17f, 1902);
-        CreateCloudRing(world.transform, summit + Vector3.up * 10f);
         SetupPlayerAndCamera(scene, new Vector3(-10f, .15f, -27f), false);
         Save(scene, "DinhSocHoaThanh");
     }
@@ -326,19 +325,6 @@ public static class KayKitWorldMapBuilder
         Place(KenneyForest, "platform", parent, origin + rotation * new Vector3(5f, 1.4f, 2f), rotation);
         Place(KenneyForest, "bridge", parent, origin + rotation * new Vector3(9f, 2.1f, 3.5f), rotation);
         Place(KenneyForest, "flag", parent, origin + rotation * new Vector3(12f, 2.1f, 4.5f), rotation);
-    }
-
-    private static void CreateCloudRing(Transform parent, Vector3 center)
-    {
-        Material cloud = GetColorMaterial("Ascension_Cloud", new Color(.72f, .88f, 1f));
-        for (int i = 0; i < 14; i++)
-        {
-            float a = i / 14f * Mathf.PI * 2f;
-            GameObject puff = GameObject.CreatePrimitive(PrimitiveType.Sphere); puff.name = "Mây hóa thánh"; puff.transform.SetParent(parent);
-            puff.transform.position = center + new Vector3(Mathf.Cos(a) * 20f, Mathf.Sin(i * 2f) * 2f, Mathf.Sin(a) * 20f);
-            puff.transform.localScale = new Vector3(6f, 2f, 4f); puff.GetComponent<Renderer>().sharedMaterial = cloud;
-            UnityEngine.Object.DestroyImmediate(puff.GetComponent<Collider>());
-        }
     }
 
     private static Scene NewScene(string title, string description, string next)
