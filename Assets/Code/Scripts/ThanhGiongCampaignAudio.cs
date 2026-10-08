@@ -18,7 +18,7 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
     public int SeedCueCount { get; private set; }
     private readonly Dictionary<string, AudioClip> clips = new Dictionary<string, AudioClip>();
     private readonly RaycastHit[] groundHits = new RaycastHit[16];
-    private AudioSource music, combatMusic, ambience;
+    private AudioSource music, combatMusic, ambience, ascensionMusic;
     private readonly List<SpatialEmitter> spatial = new List<SpatialEmitter>();
     private sealed class SpatialEmitter { public AudioSource source; public Bounds area; public float gain, radius; }
     private ThanhGiongEnemy[] nearbyEnemies = new ThanhGiongEnemy[0];
@@ -29,7 +29,7 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
     private MountedHorseController movement;
     private ThanhGiongCampaignController campaign;
     private int voiceIndex;
-    private float age, hoofClock;
+    private float age, hoofClock, ascensionMix;
     private bool paused;
     private Renderer riverWater;
     private GodotEnvironmentMotion forgeMotion;
@@ -48,8 +48,9 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
         movement = GetComponent<MountedHorseController>();
         campaign = GetComponent<ThanhGiongCampaignController>();
         music = NewVoice(true); ambience = NewVoice(true);
-        music.clip = Clip("music_" + (Region=="battle"?"camp":Region)); ambience.clip = Clip("ambient_" + Region);
+        music.clip = Clip(Region == "sacred" ? "music_sacred_full" : "music_" + (Region=="battle"?"camp":Region)); ambience.clip = Clip("ambient_" + Region);
         combatMusic = NewVoice(true); combatMusic.clip = Clip("music_battle"); combatMusic.volume = 0;
+        if (Region == "sacred") { ascensionMusic = NewVoice(false); ascensionMusic.clip = Clip("music_ascension"); ascensionMusic.volume = 0; }
         music.volume = ambience.volume = 0;
         if (music.clip != null) music.Play();
         if (ambience.clip != null) ambience.Play();
@@ -105,17 +106,20 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
             paused = shouldPause;
             SetPaused(music); SetPaused(ambience);
             SetPaused(combatMusic);
+            if (ascensionMusic != null) SetPaused(ascensionMusic);
             foreach (SpatialEmitter emitter in spatial) SetPaused(emitter.source);
             foreach (AudioSource voice in voices) SetPaused(voice);
         }
         if (paused) return;
         age += Time.deltaTime;
         float fade = Mathf.Clamp01(age / 1.3f);
+        ascensionMix = Mathf.MoveTowards(ascensionMix, ascensionMusic != null && ascensionMusic.isPlaying ? 1f : 0f, Time.deltaTime * .9f);
         float threat = FindThreat();
         CombatIntensity = Mathf.Lerp(CombatIntensity, threat, 1 - Mathf.Exp(-Time.deltaTime * (threat > CombatIntensity ? 1.6f : .65f)));
-        music.volume = musicGain * fade * Mathf.Sqrt(1 - CombatIntensity);
+        music.volume = musicGain * fade * Mathf.Sqrt(1 - CombatIntensity) * (Region == "sacred" ? 1.6f : 1f) * Mathf.Lerp(1f, .38f, ascensionMix);
         combatMusic.volume = musicGain * fade * Mathf.Sqrt(CombatIntensity) * .85f;
-        ambience.volume = ambienceGain * fade * Mathf.Lerp(1, .7f, CombatIntensity);
+        ambience.volume = ambienceGain * fade * Mathf.Lerp(1, .7f, CombatIntensity) * (Region == "sacred" ? .58f : 1f) * Mathf.Lerp(1f, .45f, ascensionMix);
+        if (ascensionMusic != null) ascensionMusic.volume = musicGain * 2.2f * fade * ascensionMix;
         SpatialAmbienceGain = 0;
         foreach (SpatialEmitter emitter in spatial) {
             emitter.source.transform.position = emitter.area.center;
@@ -173,17 +177,19 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
 
     private void SetPaused(AudioSource source)
     {
+        if (source == null) return;
         if (paused) source.Pause(); else source.UnPause();
     }
 
     public void UpdateHooves(float delta, float speed, bool grounded, string surface)
     {
         if (paused || !grounded || speed < .45f) { hoofClock = 0; return; }
-        float interval = Mathf.Lerp(.34f, .14f, Mathf.Clamp01((speed - 1f) / 7.5f));
+        float pace = Mathf.Clamp01((speed - 1f) / 7.5f);
+        float interval = Mathf.Lerp(.42f, .19f, pace) * (HoofCount % 2 == 0 ? .92f : 1.08f);
         hoofClock += delta;
         if (hoofClock < interval) return;
         hoofClock %= interval; HoofCount++;
-        PlayCue("hoof_" + (surface == "wood" || surface == "stone" || surface == "wet" ? surface : "dirt"), .56f);
+        PlayCue("hoof_" + (surface == "wood" || surface == "stone" || surface == "wet" ? surface : "dirt") + "_soft", Mathf.Lerp(.29f, .43f, pace));
     }
 
     public string DetectSurface()
@@ -220,10 +226,18 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
         AudioSource voice = null;
         // Avoid stealing a weapon/gear impact for routine hoof beats when the bounded pool fills.
         for (int i = 0; i < voices.Length; i++) { AudioSource candidate = voices[(voiceIndex + i) % voices.Length]; if (!candidate.isPlaying) { voice = candidate; break; } }
-        if (voice == null && cue.StartsWith("hoof_")) return;
+        bool hoof = cue.StartsWith("hoof_");
+        if (voice == null && hoof) return;
         if (voice == null) voice = voices[voiceIndex % voices.Length]; voiceIndex++;
-        voice.Stop(); voice.clip = clip; voice.pitch = Random.Range(.94f, 1.06f);
-        voice.volume = effectsGain * gain; voice.Play();
+        voice.Stop(); voice.clip = clip; voice.pitch = hoof ? Random.Range(.96f, 1.04f) : Random.Range(.94f, 1.06f);
+        voice.volume = effectsGain * gain * (hoof ? Random.Range(.92f, 1.04f) : 1f); voice.Play();
+    }
+
+    public void PlayAscensionMusic()
+    {
+        if (ascensionMusic == null || ascensionMusic.clip == null || Time.timeScale <= 0) return;
+        ascensionMusic.Stop(); ascensionMusic.Play();
+        LastCue = "music_ascension";
     }
 
     public void PlayGrowth() => PlayCue("arrival", .95f);
@@ -243,6 +257,7 @@ public sealed class ThanhGiongCampaignAudio : MonoBehaviour
     {
         if (music != null) music.Stop(); if (ambience != null) ambience.Stop();
         if (combatMusic != null) combatMusic.Stop();
+        if (ascensionMusic != null) ascensionMusic.Stop();
         foreach (SpatialEmitter emitter in spatial) if (emitter.source != null) emitter.source.Stop();
         if (voices != null) foreach (AudioSource voice in voices) if (voice != null) voice.Stop();
     }

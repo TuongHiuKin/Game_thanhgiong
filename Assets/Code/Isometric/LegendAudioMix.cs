@@ -27,7 +27,8 @@ public sealed class LegendAudioMix : MonoBehaviour
     {
         if(Time.unscaledTime>=refreshAt){sources=GetComponentsInChildren<AudioSource>(true);refreshAt=Time.unscaledTime+.5f;}
         bool eventPlaying=false;
-        foreach(AudioSource source in sources)if(source!=null&&!source.loop&&source.isPlaying&&source.clip!=null&&!source.clip.name.StartsWith("hoof_"))eventPlaying=true;
+        foreach(AudioSource source in sources)if(source!=null&&!source.loop&&source.isPlaying&&source.clip!=null&&
+            !source.clip.name.StartsWith("hoof_")&&!source.clip.name.StartsWith("music_"))eventPlaying=true;
         if(Time.timeScale>0)DuckGain=Mathf.Lerp(DuckGain,eventPlaying?.55f:1,1-Mathf.Exp(-Time.unscaledDeltaTime*(eventPlaying?10:3)));
         ApplyMix();
     }

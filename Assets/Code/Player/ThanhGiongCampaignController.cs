@@ -978,6 +978,7 @@ public class ThanhGiongCampaignController : MonoBehaviour
         isTransitioning = true;
         while (mountedMotion != null && mountedMotion.IsBusy) yield return null;
         mountedMotion?.SetFlying(true);
+        audioFx?.PlayAscensionMusic();
         movement.enabled = false;
         Vector3 start = transform.position;
         Vector3 end = ascensionTarget != null ? ascensionTarget.position : start + new Vector3(40f, 55f, 40f);
@@ -1004,7 +1005,6 @@ public class ThanhGiongCampaignController : MonoBehaviour
                 {
                     Vector3 dropGround = new Vector3(transform.position.x + Random.Range(-6f, 6f), 0.5f, transform.position.z + Random.Range(-6f, 6f));
                     vfx?.SpawnLegendaryRemains(transform.position, dropGround);
-                    audioFx?.PlayFire();
                 }
             }
 
