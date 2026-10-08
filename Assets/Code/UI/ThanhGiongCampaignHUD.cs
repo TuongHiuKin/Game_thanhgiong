@@ -36,11 +36,14 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
     private LegendSeedSkills seeds;
     private LegendCheckpoint checkpoint;
     private GUIStyle title, body, caption, small, centered, frame, button, hudTitle, hudBody, tile;
+    private Font serifRegular, serifBold;
     private readonly Collider[] nearby = new Collider[32];
     private static readonly Color Paper = new Color(.94f, .87f, .73f);
     private static readonly Color Gold = new Color(.83f, .65f, .33f);
     private static readonly Color Muted = new Color(.71f, .63f, .52f);
-    private static readonly Color Red = new Color(.18f, .055f, .045f, .65f);
+    private static readonly Color PanelTeal = new Color(.025f, .12f, .11f, .78f);
+    private static readonly Color Forest = new Color(.025f, .15f, .13f);
+    private static readonly Color Spring = new Color(.55f, .88f, .27f);
 
     private void Start()
     {
@@ -147,22 +150,25 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
     private void EnsureStyles()
     {
         if (title != null) return;
+        serifRegular = Resources.Load<Font>("ThanhGiongUI/OldStandard-Regular");
+        serifBold = Resources.Load<Font>("ThanhGiongUI/OldStandard-Bold");
         title = Style(23, Paper, true); body = Style(15, Muted); caption = Style(13, Gold);
-        small = Style(11, Muted); centered = Style(19, Paper, true); centered.alignment = TextAnchor.MiddleCenter;
-        hudTitle = Style(15, Paper, true); hudBody = Style(12, Paper);
+        small = Style(12, Muted); centered = Style(19, Paper, true); centered.alignment = TextAnchor.MiddleCenter;
+        hudTitle = Style(16, Paper, true); hudBody = Style(13, Paper);
         tile = Style(11, Paper); tile.alignment = TextAnchor.MiddleCenter;
         frame = new GUIStyle(GUI.skin.box);
         frame.normal.background = panelFrame;
         frame.border = new RectOffset(8, 8, 8, 8);
-        button = new GUIStyle(GUI.skin.button) { fontSize = 13, wordWrap = true };
+        button = new GUIStyle(GUI.skin.button) { font = serifBold, fontSize = 14, wordWrap = true };
         button.normal.textColor = Paper; button.hover.textColor = Gold;
         button.active.textColor = Gold;
     }
 
-    private static GUIStyle Style(int size, Color color, bool bold = false)
+    private GUIStyle Style(int size, Color color, bool bold = false)
     {
         GUIStyle result = new GUIStyle(GUI.skin.label) { fontSize = size, wordWrap = true,
-            fontStyle = bold ? FontStyle.Bold : FontStyle.Normal };
+            font = bold ? serifBold : serifRegular,
+            fontStyle = bold && serifBold == null ? FontStyle.Bold : FontStyle.Normal };
         result.normal.textColor = color; return result;
     }
 
@@ -243,16 +249,16 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
 
     private void DrawVitals(float h)
     {
-        Rect rect=new Rect(16,h-82,220,66);Box(rect);
-        GUI.Label(new Rect(rect.x+10,rect.y+6,200,18),$"Sinh lực {Mathf.RoundToInt(campaign.Health01*100)}%",hudBody);
-        ThinBar(new Rect(rect.x+10,rect.y+26,200,6),campaign.Health01,new Color(.72f,.22f,.19f));
+        Rect rect=new Rect(16,h-108,278,92);Box(rect);
+        GUI.Label(new Rect(rect.x+12,rect.y+5,245,23),$"SINH LỰC  {Mathf.RoundToInt(campaign.Health01*100)}%",hudTitle);
+        DrawEnchantedHealthBar(new Rect(rect.x+12,rect.y+31,254,23),campaign.Health01,false);
         string resource=campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Prologue
             ? $"Lương {Mathf.RoundToInt(campaign.FoodProgress*100)}% · lớn {campaign.GrowthPhase+1}/4"
             : campaign.IsBattleActive ? $"Hạ {campaign.Kills}/{campaign.victoryKills} · áp {Mathf.RoundToInt(campaign.BattlePressure01*100)}% · hỏa {Mathf.RoundToInt(campaign.Heat01*100)}%"
             : campaign.CurrentChapter==ThanhGiongCampaignController.Chapter.Preparation ? $"Trang bị {Mathf.Min(campaign.EquipmentStep,4)}/4" : "Phù Đổng Thiên Vương";
-        GUI.Label(new Rect(rect.x+10,rect.y+37,200,17),resource,small);
+        GUI.Label(new Rect(rect.x+12,rect.y+59,254,17),resource,small);
         if (campaign.CurrentChapter == ThanhGiongCampaignController.Chapter.Battle && campaign.CurrentWeapon == ThanhGiongCampaignController.Weapon.Bamboo)
-            GUI.Label(new Rect(rect.x+10,rect.y+52,200,14),campaign.BambooVariantName,small);
+            GUI.Label(new Rect(rect.x+12,rect.y+75,254,15),campaign.BambooVariantName,small);
     }
 
     private string ControlHint()
@@ -362,16 +368,16 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
             }
         }
         if (cachedBoss == null || !cachedBoss.gameObject.activeInHierarchy || cachedBoss.HealthRatio <= 0) return;
-        Rect rect = new Rect(w - 226, 16, 210, 48);
+        Rect rect = new Rect(w - 294, 16, 278, 67);
         Box(rect);
-        GUI.Label(new Rect(rect.x + 10, rect.y + 5, 190, 20), cachedBoss.IsStuckInGround ? "TƯỚNG ÂN · ĐAO MẮC KẸT!" : "TƯỚNG GIẶC ÂN",small);
-        ThinBar(new Rect(rect.x + 10, rect.y + 30, 190, 7), cachedBoss.HealthRatio, new Color(.7f, .22f, .19f));
+        GUI.Label(new Rect(rect.x + 12, rect.y + 5, 254, 23), cachedBoss.IsStuckInGround ? "TƯỚNG ÂN · ĐAO MẮC KẸT!" : "TƯỚNG GIẶC ÂN",hudTitle);
+        DrawEnchantedHealthBar(new Rect(rect.x + 12, rect.y + 32, 254, 23), cachedBoss.HealthRatio, true);
     }
 
     private void Box(Rect rect,bool expanded=false)
     {
         Color previous = GUI.color;
-        GUI.color = new Color(Red.r, Red.g, Red.b, previous.a * (expanded?.94f:Red.a));
+        GUI.color = new Color(PanelTeal.r, PanelTeal.g, PanelTeal.b, previous.a * (expanded?.94f:PanelTeal.a));
         GUI.DrawTexture(rect, Texture2D.whiteTexture);
         GUI.color = new Color(Gold.r, Gold.g, Gold.b, previous.a * (expanded?1:.6f));
         if (panelFrame != null) {
@@ -403,6 +409,33 @@ public class ThanhGiongCampaignHUD : MonoBehaviour
         GUI.color=new Color(.09f,.045f,.035f,.6f);GUI.DrawTexture(rect,Texture2D.whiteTexture);
         GUI.color=fill;GUI.DrawTexture(new Rect(rect.x,rect.y,rect.width*Mathf.Clamp01(value),rect.height),Texture2D.whiteTexture);
         GUI.color=previous;
+    }
+
+    private void DrawEnchantedHealthBar(Rect rect, float value, bool boss)
+    {
+        float alpha = GUI.color.a;
+        Color previous = GUI.color;
+        value = Mathf.Clamp01(value);
+        GUI.color = new Color(Gold.r, Gold.g, Gold.b, alpha);
+        GUI.DrawTexture(rect, Texture2D.whiteTexture);
+        Rect track = new Rect(rect.x + 2, rect.y + 2, rect.width - 4, rect.height - 4);
+        GUI.color = new Color(Forest.r, Forest.g, Forest.b, alpha);
+        GUI.DrawTexture(track, Texture2D.whiteTexture);
+        float fillWidth = (track.width - 4) * value;
+        if (fillWidth > 0.1f) {
+            Rect fill = new Rect(track.x + 2, track.y + 2, fillWidth, track.height - 4);
+            Color core = boss ? new Color(.89f, .52f, .25f) : Color.Lerp(new Color(.98f, .42f, .24f), Spring, Mathf.Clamp01(value * 2f));
+            GUI.color = new Color(core.r, core.g, core.b, alpha);
+            GUI.DrawTexture(fill, Texture2D.whiteTexture);
+            GUI.color = new Color(1f, .97f, .68f, alpha * .65f);
+            GUI.DrawTexture(new Rect(fill.x, fill.y, fill.width, 4), Texture2D.whiteTexture);
+            float shimmer = Mathf.Repeat(Time.unscaledTime * 34f, Mathf.Max(1f, fillWidth));
+            GUI.color = new Color(1f, 1f, .78f, alpha * .55f);
+            GUI.DrawTexture(new Rect(fill.x + shimmer, fill.y + 2, Mathf.Min(3f, fill.xMax - fill.x - shimmer), fill.height - 4), Texture2D.whiteTexture);
+        }
+        GUI.color = new Color(Paper.r, Paper.g, Paper.b, alpha * .85f);
+        GUI.DrawTexture(new Rect(rect.x + rect.width * .5f - 1, rect.y - 2, 2, 4), Texture2D.whiteTexture);
+        GUI.color = previous;
     }
 
     private void Bar(Rect rect, float value, Color fill, string label)

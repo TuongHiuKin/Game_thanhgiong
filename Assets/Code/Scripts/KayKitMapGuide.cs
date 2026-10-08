@@ -28,9 +28,11 @@ public class KayKitMapGuide : MonoBehaviour
         if (!showLegacyPanel || !legacyPanelVisible) return;
         if (title == null)
         {
-            title = new GUIStyle(GUI.skin.label) { fontSize = 24, fontStyle = FontStyle.Bold };
+            Font bold = Resources.Load<Font>("ThanhGiongUI/OldStandard-Bold");
+            Font regular = Resources.Load<Font>("ThanhGiongUI/OldStandard-Regular");
+            title = new GUIStyle(GUI.skin.label) { font = bold, fontSize = 24, fontStyle = bold == null ? FontStyle.Bold : FontStyle.Normal };
             title.normal.textColor = new Color(1f, .78f, .18f);
-            body = new GUIStyle(GUI.skin.label) { fontSize = 15, wordWrap = true };
+            body = new GUIStyle(GUI.skin.label) { font = regular, fontSize = 16, wordWrap = true };
             body.normal.textColor = Color.white;
             frame = new GUIStyle(GUI.skin.box);
             frame.normal.background = panelFrame;

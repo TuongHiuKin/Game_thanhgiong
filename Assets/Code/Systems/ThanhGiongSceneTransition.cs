@@ -153,9 +153,11 @@ public sealed class ThanhGiongSceneTransition : MonoBehaviour
     private void EnsureLoadingStyles()
     {
         if (titleStyle != null) return;
-        titleStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 74, fontStyle = FontStyle.Bold };
-        captionStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 34, fontStyle = FontStyle.Bold };
-        detailStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontSize = 23, fontStyle = FontStyle.Bold, wordWrap = true };
+        Font bold = Resources.Load<Font>("ThanhGiongUI/OldStandard-Bold");
+        Font regular = Resources.Load<Font>("ThanhGiongUI/OldStandard-Regular");
+        titleStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, font = bold, fontSize = 78, fontStyle = bold == null ? FontStyle.Bold : FontStyle.Normal };
+        captionStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, font = bold, fontSize = 35, fontStyle = bold == null ? FontStyle.Bold : FontStyle.Normal };
+        detailStyle = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, font = regular, fontSize = 26, fontStyle = FontStyle.Normal, wordWrap = true };
     }
 
     private static void DrawColor(Rect rect, Color color, float alpha)
