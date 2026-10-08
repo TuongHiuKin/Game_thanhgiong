@@ -12,10 +12,13 @@ public class ThanhGiongEnemyAnimationDriver : MonoBehaviour
     private ThanhGiongEnemy enemy;
     private Animator animator;
     private Rigidbody body;
-    private bool hasSpeed, hasAttack, hasHit, hasDead, hasStuck;
+    private bool hasSpeed, hasAttack, hasWindup, hasStrike, hasRecovery, hasHit, hasDead, hasStuck;
     private ThanhGiongEnemy.EnemyState previousState;
     private static readonly int SpeedHash=Animator.StringToHash("Speed");
     private static readonly int AttackHash=Animator.StringToHash("Attack");
+    private static readonly int WindupHash=Animator.StringToHash("Windup");
+    private static readonly int StrikeHash=Animator.StringToHash("Strike");
+    private static readonly int RecoveryHash=Animator.StringToHash("Recovery");
     private static readonly int HitHash=Animator.StringToHash("Hit");
     private static readonly int DeadHash=Animator.StringToHash("Dead");
     private static readonly int StuckHash=Animator.StringToHash("Stuck");
@@ -36,6 +39,9 @@ public class ThanhGiongEnemyAnimationDriver : MonoBehaviour
             else if(p.nameHash==HitHash)hasHit=true;
             else if(p.nameHash==DeadHash)hasDead=true;
             else if(p.nameHash==StuckHash)hasStuck=true;
+            else if(p.nameHash==WindupHash)hasWindup=true;
+            else if(p.nameHash==StrikeHash)hasStrike=true;
+            else if(p.nameHash==RecoveryHash)hasRecovery=true;
         }
         previousState=enemy.CurrentState;
     }
@@ -50,12 +56,15 @@ public class ThanhGiongEnemyAnimationDriver : MonoBehaviour
         ThanhGiongEnemy.EnemyState state=enemy.CurrentState;
         if(state!=previousState)
         {
-            if((state==ThanhGiongEnemy.EnemyState.TelegraphingAttack || state==ThanhGiongEnemy.EnemyState.Slamming) && hasAttack) animator.SetTrigger(AttackHash);
+            if(state==ThanhGiongEnemy.EnemyState.TelegraphingAttack && hasAttack && !hasStrike) animator.SetTrigger(AttackHash);
+            if(state==ThanhGiongEnemy.EnemyState.Slamming && hasStrike) animator.SetTrigger(StrikeHash);
             if(state==ThanhGiongEnemy.EnemyState.Stunned && hasHit) animator.SetTrigger(HitHash);
             if(state==ThanhGiongEnemy.EnemyState.Dead && hasDead) animator.SetTrigger(DeadHash);
             previousState=state;
         }
         if(hasStuck) animator.SetBool(StuckHash,state==ThanhGiongEnemy.EnemyState.StuckInGround);
+        if(hasWindup) animator.SetBool(WindupHash,state==ThanhGiongEnemy.EnemyState.TelegraphingAttack);
+        if(hasRecovery) animator.SetBool(RecoveryHash,state==ThanhGiongEnemy.EnemyState.Recovering);
 
         float targetPlayback = state==ThanhGiongEnemy.EnemyState.StuckInGround ? .38f : 1f;
         animator.speed=Mathf.MoveTowards(animator.speed,targetPlayback,Time.deltaTime/stateBlendTime);

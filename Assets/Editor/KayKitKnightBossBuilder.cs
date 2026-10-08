@@ -30,7 +30,8 @@ public static class KayKitKnightBossBuilder
     public static void BuildAndApply()
     {
         EnsureFolder(OutputFolder);
-        AnimatorController controller = BuildController();
+        EnemyMotionGraphBuilder.Build();
+        AnimatorController controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
         Material material = BuildBossMaterial();
         GameObject visualPrefab = BuildVisualPrefab(controller, material);
         BuildGameplayPrefab(visualPrefab);

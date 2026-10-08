@@ -14,7 +14,7 @@ public static class BarbarianArmyBuilder
     private const string ModelPath = KayKitRoot + "/Characters/fbx/Barbarian.fbx";
     private const string AxePath = KayKitRoot + "/Assets/fbx(unity)/axe_1handed.fbx";
     private const string ShieldPath = KayKitRoot + "/Assets/fbx(unity)/shield_round_barbarian.fbx";
-    private const string ControllerPath = "Assets/Animations/ThanhGiongKnight.controller";
+    private const string ControllerPath = "Assets/Animations/ThanhGiongEnemySoldier.controller";
     private const string PrefabFolder = "Assets/Prefabs/Enemies";
     private const string PrefabPath = PrefabFolder + "/KayKit_Barbarian_Soldier.prefab";
     private const string TargetScene = "Assets/Scenes/ThanhGiongWorld/PhaoDaiNgamQuanAn.unity";

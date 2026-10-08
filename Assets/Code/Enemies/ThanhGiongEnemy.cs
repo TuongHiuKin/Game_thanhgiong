@@ -732,6 +732,10 @@ public class ThanhGiongEnemy : MonoBehaviour
             visualModel.localRotation = visualBaseLocalRot * Quaternion.Euler(42f, 0f, 0f);
         }
 
+        // Let the weapon animation reach its downswing before applying the hit.
+        yield return new WaitForSeconds(.22f);
+        if (health <= 0f || Time.time < stunnedUntil || campaign == null || !campaign.IsBattleActive) yield break;
+
         // Ground shockwave effects & camera shake
         SpawnGroundImpact(slamTargetPos, effectiveSlamRadius);
         IsometricCameraFollow.Instance?.Shake(0.7f, 0.45f);
@@ -808,17 +812,30 @@ public class ThanhGiongEnemy : MonoBehaviour
         if (rb != null) SmoothVelocity(Vector3.zero);
         Vector3 origPos = visualModel != null ? visualModel.localPosition : Vector3.zero;
 
-        // Quick thrust forward
+        // Draw the weapon back during the warning, then strike on the damage frame.
         if (visualModel != null && visualModel != transform)
         {
-            visualModel.localPosition = origPos + Vector3.forward * 0.4f;
-            visualModel.localRotation = visualBaseLocalRot * Quaternion.Euler(15f, 0f, 0f);
+            visualModel.localPosition = origPos - Vector3.forward * 0.12f;
+            visualModel.localRotation = visualBaseLocalRot * Quaternion.Euler(-12f, 0f, 0f);
         }
 
         yield return new WaitForSeconds(Mathf.Lerp(0.20f, 0.14f, pressure));
+        if (health <= 0f || Time.time < stunnedUntil) yield break;
+        CurrentState = EnemyState.Slamming;
+        if (visualModel != null && visualModel != transform)
+        {
+            visualModel.localPosition = origPos + Vector3.forward * 0.26f;
+            visualModel.localRotation = visualBaseLocalRot * Quaternion.Euler(14f, 0f, 0f);
+        }
+        yield return new WaitForSeconds(.10f);
+        if (health <= 0f || Time.time < stunnedUntil) yield break;
         if (health > 0f && Time.time >= stunnedUntil && target != null && campaign != null &&
             campaign.IsBattleActive && Vector3.Distance(target.position, transform.position) < 3f * rangeScale)
             campaign.DamagePlayer(8f * damageScale, transform.position);
+        yield return new WaitForSeconds(.28f);
+        if (health <= 0f || Time.time < stunnedUntil) yield break;
+        CurrentState = EnemyState.Recovering;
+        yield return new WaitForSeconds(.18f);
         ResetVisualPose();
         if (health > 0f && Time.time >= stunnedUntil) CurrentState = EnemyState.Chasing;
     }
@@ -840,6 +857,10 @@ public class ThanhGiongEnemy : MonoBehaviour
         SpawnRangedTracer(origin, aim, new Color(1f, .74f, .18f, .95f), .34f);
 
         yield return new WaitForSeconds(Mathf.Lerp(.34f, .22f, pressure));
+        if (health <= 0f || Time.time < stunnedUntil) yield break;
+        CurrentState = EnemyState.Slamming;
+        yield return new WaitForSeconds(.12f);
+        if (health <= 0f || Time.time < stunnedUntil) yield break;
         if (health > 0f && Time.time >= stunnedUntil && target != null && campaign != null && campaign.IsBattleActive)
         {
             Vector3 toTarget = target.position - transform.position;
@@ -847,6 +868,10 @@ public class ThanhGiongEnemy : MonoBehaviour
             if (toTarget.sqrMagnitude <= archerRange * archerRange)
                 campaign.DamagePlayer(6.5f * damageScale, transform.position);
         }
+        yield return new WaitForSeconds(.28f);
+        if (health <= 0f || Time.time < stunnedUntil) yield break;
+        CurrentState = EnemyState.Recovering;
+        yield return new WaitForSeconds(.18f);
         ResetVisualPose();
         if (health > 0f && Time.time >= stunnedUntil) CurrentState = EnemyState.Chasing;
     }

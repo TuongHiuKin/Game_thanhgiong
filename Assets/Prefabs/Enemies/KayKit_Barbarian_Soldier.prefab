@@ -103,6 +103,7 @@ MonoBehaviour:
   moveSpeed: 2.7
   engageDistance: 28
   isBoss: 0
+  role: 0
   enemyName: "Chi\u1EBFn Binh Barbarian"
   heavyAttackRange: 4.2
   heavyAttackCooldown: 5.5
@@ -113,6 +114,10 @@ MonoBehaviour:
   slamRadius: 2.8
   minionAttackInterval: 2
   locomotionSmoothTime: 0.16
+  surroundRadius: 2.25
+  formationTolerance: 0.5
+  separationRadius: 1
+  separationStrength: 1.25
 --- !u!114 &8177717185015819654
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -235,7 +240,7 @@ Animator:
   m_GameObject: {fileID: 6669338474735434343}
   m_Enabled: 1
   m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 9100000, guid: 85f6f687bc6de2d49a3b11337f154a8a, type: 2}
+  m_Controller: {fileID: 9100000, guid: 2c8d4c1762c5b124080c45944a04f905, type: 2}
   m_CullingMode: 0
   m_UpdateMode: 0
   m_ApplyRootMotion: 0
