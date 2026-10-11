@@ -40,17 +40,21 @@ public class MountedHorseLegAnimationTests
     }
 
     [Test]
-    public void RestPoseMatchesTheOriginalHorseAtItsPrefabScale()
+    public void LevelRestPosePlacesAllFourOriginalHoovesOnOnePlane()
     {
         Mesh baked = new Mesh();
         try
         {
             Skin.BakeMesh(baked, true);
-            Vector3[] original = Source.sharedMesh.vertices;
             Vector3[] current = baked.vertices;
-            float error = original.Select((v, i) => Vector3.Distance(
-                Source.transform.TransformPoint(v), Skin.transform.TransformPoint(current[i]))).Max();
-            Assert.Less(error, .001f, "Skinning changed the original model's position or scale.");
+            // The source OBJ rears. The authored skin intentionally levels its back and forelegs.
+            Transform[] hooves = Skin.bones.Skip(9).Take(4).ToArray();
+            Assert.AreEqual(4, hooves.Length);
+            Assert.Less(hooves.Max(f => f.position.y) - hooves.Min(f => f.position.y), .001f);
+            Assert.Less(Quaternion.Angle(Skin.bones[13].rotation, Source.transform.rotation), .001f, "The seated rider must remain upright.");
+            float bindError = Skin.sharedMesh.vertices.Select((v, i) => Vector3.Distance(
+                Skin.transform.TransformPoint(v), Skin.transform.TransformPoint(current[i]))).Max();
+            Assert.Less(bindError, .001f, "Skinning must preserve the authored level rest pose.");
         }
         finally { UnityEngine.Object.DestroyImmediate(baked); }
     }
