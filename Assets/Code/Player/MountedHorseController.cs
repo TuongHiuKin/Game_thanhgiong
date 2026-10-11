@@ -146,7 +146,7 @@ public class MountedHorseController : MonoBehaviour
 
         ThanhGiongRibbonCape cape = GetComponent<ThanhGiongRibbonCape>();
         if (cape == null) cape = gameObject.AddComponent<ThanhGiongRibbonCape>();
-        cape.anchorTransform = visual != null ? visual : transform;
+        if (cape.anchorTransform == null) cape.anchorTransform = visual != null ? visual : transform;
         foreach (GeneratedCharacterMotion motion in generatedMotions)
             if (motion != null && motion.kind == GeneratedCharacterMotion.CharacterKind.ThanhGiong)
             {
@@ -182,17 +182,18 @@ public class MountedHorseController : MonoBehaviour
     {
         if (Time.deltaTime <= 0f) return;
         bool equipmentBusy = godotMotion != null && godotMotion.IsBusy;
-        Vector2 input = equipmentBusy ? Vector2.zero : new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
+        bool arenaMode = campaignController != null && campaignController.IsArena;
+        Vector2 input = equipmentBusy ? Vector2.zero : arenaMode ? ThanhGiongArenaInput.Move : new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
         Vector3 move = CameraRelativeDirection(input);
         if (move.sqrMagnitude > .01f) { recentDirection = move; recentDirectionTime = Time.time; }
-        if (Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.LeftAlt) || Input.GetKeyDown(KeyCode.LeftControl)) TryDodge(move);
+        if (arenaMode ? ThanhGiongArenaInput.Down(KeyCode.C) || ThanhGiongArenaInput.Down(KeyCode.LeftAlt) || ThanhGiongArenaInput.Down(KeyCode.LeftControl) : Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.LeftAlt) || Input.GetKeyDown(KeyCode.LeftControl)) TryDodge(move);
         if (!equipmentBusy && campaignController == null && Input.GetMouseButtonDown(0))
             TryAttack();
 
-        if (!equipmentBusy && Input.GetKeyDown(KeyCode.Space))
+        if (!equipmentBusy && (arenaMode ? ThanhGiongArenaInput.Down(KeyCode.Space) : Input.GetKeyDown(KeyCode.Space)))
             RequestJump();
 
-        bool running = Input.GetKey(KeyCode.LeftShift);
+        bool running = arenaMode ? ThanhGiongArenaInput.Running : Input.GetKey(KeyCode.LeftShift);
         float speed = running ? runSpeed : walkSpeed;
         if (IsAttacking) speed *= 0.25f;
         Vector3 desiredPlanarVelocity = move * speed;

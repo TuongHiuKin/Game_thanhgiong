@@ -165,11 +165,16 @@ public static class MountedHorseMeshRigBuilder
             * Matrix4x4.Translate(-a);
     }
 
-    static Vector3 PoseVertex(Vector3 vertex, BoneWeight w, Matrix4x4[] poses) =>
-        poses[w.boneIndex0].MultiplyPoint3x4(vertex) * w.weight0 +
-        poses[w.boneIndex1].MultiplyPoint3x4(vertex) * w.weight1 +
-        poses[w.boneIndex2].MultiplyPoint3x4(vertex) * w.weight2 +
-        poses[w.boneIndex3].MultiplyPoint3x4(vertex) * w.weight3;
+    static Vector3 PoseVertex(Vector3 vertex, BoneWeight w, Matrix4x4[] poses)
+    {
+        float total = w.weight0 + w.weight1 + w.weight2 + w.weight3;
+        if (total <= 0.00001f) return poses[0].MultiplyPoint3x4(vertex);
+        float inv = 1f / total;
+        return (poses[w.boneIndex0].MultiplyPoint3x4(vertex) * w.weight0 +
+            poses[w.boneIndex1].MultiplyPoint3x4(vertex) * w.weight1 +
+            poses[w.boneIndex2].MultiplyPoint3x4(vertex) * w.weight2 +
+            poses[w.boneIndex3].MultiplyPoint3x4(vertex) * w.weight3) * inv;
+    }
 
     static BoneWeight Weight(Vector3 vertex)
     {
@@ -180,6 +185,7 @@ public static class MountedHorseMeshRigBuilder
         rider = Mathf.Max(rider, Smooth((Mathf.Abs(vertex.x + .09f) - .21f) / .045f)
             * Smooth((vertex.y - .62f) / .14f) * (1f - Smooth((vertex.z - .48f) / .1f)));
         if (rider > .999f) return new BoneWeight { boneIndex0 = 13, weight0 = 1f };
+        if (rider <= .001f) rider = 0f;
 
         float side = Smooth((Mathf.Abs(vertex.x + .115f) - .045f) / .035f);
         float front = side * Smooth((1.035f - vertex.y) / .14f) * Smooth((vertex.z - .52f) / .10f);
