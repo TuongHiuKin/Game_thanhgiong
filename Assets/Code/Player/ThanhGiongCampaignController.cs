@@ -749,6 +749,26 @@ public class ThanhGiongCampaignController : MonoBehaviour
         Attack();return true;
     }
 
+    float MeleeRadius(MeleeProfile profile) => profile.Radius * (1f + GrowthPhase * .15f);
+    Vector3 MeleeCenter(MeleeProfile profile) => profile.Bamboo ? transform.position : transform.position + transform.forward * profile.ForwardReach;
+    bool IsMeleeTarget(ThanhGiongEnemy enemy, MeleeProfile profile)
+    {
+        if (enemy == null || !enemy.gameObject.activeInHierarchy || enemy.HealthRatio <= 0) return false;
+        Vector3 flat = Vector3.ProjectOnPlane(enemy.transform.position - transform.position, Vector3.up);
+        return profile.Bamboo || flat.sqrMagnitude <= .01f || Vector3.Dot(transform.forward, flat.normalized) >= profile.ArcDot;
+    }
+
+    // The HUD uses the same collider query, growth, weapon variant and arc as a strike.
+    public bool HasMeleeTarget()
+    {
+        if (CurrentWeapon == Weapon.None || IsDead) return false;
+        MeleeProfile profile = GetMeleeProfile(CurrentWeapon == Weapon.Bamboo);
+        int count = Physics.OverlapSphereNonAlloc(MeleeCenter(profile), MeleeRadius(profile), hits, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (IsMeleeTarget(hits[i].GetComponentInParent<ThanhGiongEnemy>(), profile)) return true;
+        return false;
+    }
+
     private void Attack()
     {
         if (CurrentWeapon == Weapon.None || movement.IsDodging) return;
@@ -772,10 +792,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
         if(!IsBattleActive||movement.IsDodging){pendingStrike=null;yield break;}
         CharacterController cc=GetComponent<CharacterController>();
         if(cc!=null&&cc.enabled&&cc.isGrounded)cc.Move(transform.forward*(beat==3?.5f:.3f));
-        float growthMultiplier = 1f + GrowthPhase * 0.15f;
-        float radius = profile.Radius * growthMultiplier;
+        float radius = MeleeRadius(profile);
 
-        Vector3 center = profile.Bamboo ? transform.position : transform.position + transform.forward * profile.ForwardReach;
+        Vector3 center = MeleeCenter(profile);
         int count = Physics.OverlapSphereNonAlloc(center, radius, hits, ~0, QueryTriggerInteraction.Ignore);
         int struck = 0;
         struckEnemies.Clear();
@@ -783,10 +802,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             ThanhGiongEnemy enemy = hits[i].GetComponentInParent<ThanhGiongEnemy>();
-            if (enemy == null || !enemy.gameObject.activeSelf || enemy.HealthRatio <= 0) continue;
+            if (!IsMeleeTarget(enemy, profile)) continue;
             Vector3 toEnemy = enemy.transform.position - transform.position;
             Vector3 flatToEnemy = Vector3.ProjectOnPlane(toEnemy, Vector3.up);
-            if (!profile.Bamboo && flatToEnemy.sqrMagnitude > 0.01f && Vector3.Dot(transform.forward, flatToEnemy.normalized) < profile.ArcDot) continue;
             if (!struckEnemies.Add(enemy)) continue;
 
             float damage = CalculateMeleeDamage(profile, enemy, flatToEnemy.magnitude, radius, beat);

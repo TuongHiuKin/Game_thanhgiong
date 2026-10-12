@@ -101,10 +101,10 @@ public static class ThanhGiongArenaBuilder
             smr.localBounds = b;
         }
         var ironWeapon = Primitive("Weapon_IronSword", PrimitiveType.Cylinder, hand, Vector3.zero, new Vector3(.055f, .85f, .055f), rod);
-        ironWeapon.transform.localPosition = new Vector3(.29f, 1.45f, .03f); ironWeapon.transform.localRotation = Quaternion.Euler(18, 0, -15);
+        ironWeapon.transform.localPosition = new Vector3(0.235f, 1.55f, 0.025f); ironWeapon.transform.localRotation = Quaternion.Euler(8f, 5f, 12f);
         UnityEngine.Object.DestroyImmediate(ironWeapon.GetComponent<Collider>());
         var bambooWeapon = Primitive("Weapon_GoldenBamboo", PrimitiveType.Cylinder, hand, Vector3.zero, new Vector3(.09f, 1.25f, .09f), tre);
-        bambooWeapon.transform.localPosition = new Vector3(.29f, 1.55f, .05f); bambooWeapon.transform.localRotation = Quaternion.Euler(18, 0, -15);
+        bambooWeapon.transform.localPosition = new Vector3(0.235f, 1.62f, 0.035f); bambooWeapon.transform.localRotation = Quaternion.Euler(8f, 5f, 12f);
         UnityEngine.Object.DestroyImmediate(bambooWeapon.GetComponent<Collider>()); bambooWeapon.SetActive(false);
         var effects = new GameObject("Arena combat and victory effects").AddComponent<ThanhGiongCampaignVFX>(); campaign.vfx = effects;
         var waves = new GameObject("Arena wave manager").AddComponent<ThanhGiongArenaWaveManager>();
@@ -122,12 +122,12 @@ public static class ThanhGiongArenaBuilder
         var flow = player.AddComponent<ThanhGiongArenaFlow>(); flow.waveManager = waves; flow.bamboo = bamboo;
         new GameObject("Arena HUD").AddComponent<ThanhGiongArenaHUD>().arena = flow;
         var camera = new GameObject("Arena third person camera", typeof(Camera), typeof(AudioListener)).GetComponent<Camera>();
-        camera.tag = "MainCamera"; camera.nearClipPlane = .15f; camera.farClipPlane = 220; camera.backgroundColor = new Color(.55f, .72f, .78f); camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.tag = "MainCamera"; camera.nearClipPlane = .15f; camera.farClipPlane = 1000f; camera.backgroundColor = new Color(.55f, .72f, .78f); camera.clearFlags = CameraClearFlags.SolidColor;
         var follow = camera.gameObject.AddComponent<IsometricCameraFollow>(); follow.target = player.transform;
-        follow.arenaPerspective = true; follow.useOrthographicIsometric = false; follow.fieldOfView = 58; follow.arenaDistance = 11; follow.lookHeight = 1.1f;
+        follow.arenaPerspective = true; follow.useOrthographicIsometric = false; follow.fieldOfView = 62; follow.arenaDistance = 15.5f; follow.lookHeight = 1.4f;
         follow.SnapToTarget();
         var sun = new GameObject("Late afternoon sunlight").AddComponent<Light>(); sun.type = LightType.Directional; sun.intensity = 1.5f; sun.shadows = LightShadows.Soft; sun.transform.rotation = Quaternion.Euler(48, -32, 0); sun.color = new Color(1, .9f, .73f);
-        RenderSettings.ambientMode = AmbientMode.Flat; RenderSettings.ambientLight = new Color(.64f, .7f, .65f); RenderSettings.fog = true; RenderSettings.fogColor = camera.backgroundColor; RenderSettings.fogMode = FogMode.Linear; RenderSettings.fogStartDistance = 65; RenderSettings.fogEndDistance = 140;
+        RenderSettings.ambientMode = AmbientMode.Flat; RenderSettings.ambientLight = new Color(.64f, .7f, .65f); RenderSettings.fog = true; RenderSettings.fogColor = camera.backgroundColor; RenderSettings.fogMode = FogMode.Linear; RenderSettings.fogStartDistance = 180f; RenderSettings.fogEndDistance = 600f;
         EditorSceneManager.SaveScene(scene, ScenePath);
         var previous = EditorBuildSettings.scenes.Where(s => s.path != ScenePath).ToList();
         previous.Insert(0, new EditorBuildSettingsScene(ScenePath, true)); EditorBuildSettings.scenes = previous.ToArray();
@@ -198,14 +198,22 @@ public static class ThanhGiongArenaBuilder
             }
         }
 
-        var isSpearGroup = Enumerable.Range(0, vertices.Length)
+        var isCullGroup = Enumerable.Range(0, vertices.Length)
             .GroupBy(Find)
             .ToDictionary(
                 g => g.Key,
                 g => {
                     var pts = g.Select(idx => vertices[idx]).ToArray();
-                    var min = new Vector3(pts.Min(p => p.x), pts.Min(p => p.y), pts.Min(p => p.z));
-                    return min.x > 0.15f && min.y >= 1.165f && min.z >= -0.08f;
+                    float minX = pts.Min(p => p.x), maxX = pts.Max(p => p.x);
+                    float minY = pts.Min(p => p.y), maxY = pts.Max(p => p.y);
+                    float minZ = pts.Min(p => p.z), maxZ = pts.Max(p => p.z);
+                    // The closed fist occupies the same X/Z corridor as the
+                    // old spear shaft. Keep the palm/fingers around Y=1.2;
+                    // the ornaments higher up belong to the old spear.
+                    bool isGrip = minY >= 1.13f && maxY <= 1.235f;
+                    bool isSpear = !isGrip && minX > 0.18f && maxX < 0.46f && minZ > -0.19f && maxZ < 0.10f && maxY > 0.50f;
+                    bool isFloatingLeftLeg = maxX < -0.15f && minX > -0.40f && minY >= 0.25f && maxY <= 0.50f && minZ >= -0.30f && maxZ <= 0.05f;
+                    return isSpear || isFloatingLeftLeg;
                 });
 
         var newMesh = UnityEngine.Object.Instantiate(sourceMesh);
@@ -218,7 +226,7 @@ public static class ThanhGiongArenaBuilder
             for (int i = 0; i < tris.Length; i += 3)
             {
                 int root = Find(tris[i]);
-                if (!isSpearGroup[root])
+                if (!isCullGroup[root])
                 {
                     kept.Add(tris[i]);
                     kept.Add(tris[i + 1]);

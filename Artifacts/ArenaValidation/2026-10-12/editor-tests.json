@@ -1,0 +1,114 @@
+{
+  "success": true,
+  "command": "command run_tests",
+  "data": {
+    "command": "run_tests",
+    "parameters": {
+      "mode": "editor",
+      "filter": "ThanhGiong",
+      "filter_type": "assembly"
+    },
+    "result": {
+      "Summary": {
+        "Total": 11,
+        "Passed": 9,
+        "Failed": 2,
+        "Skipped": 0,
+        "Inconclusive": 0
+      },
+      "Results": [
+        {
+          "FullName": "MountedHorseLegAnimationTests.AllFourOriginalLegsDeformWhileTheRiderStaysStill",
+          "Status": "Passed",
+          "Duration": 0.055533,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "MountedHorseLegAnimationTests.LevelRestPosePlacesAllFourOriginalHoovesOnOnePlane",
+          "Status": "Passed",
+          "Duration": 0.118333,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "MountedHorseLegAnimationTests.OriginalHorseMeshReplacesTheAddedCubeLegs",
+          "Status": "Passed",
+          "Duration": 0.1571118,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaSceneTests.ArenaIsFirstSceneAndKeepsPreviousWorlds",
+          "Status": "Passed",
+          "Duration": 0.002718,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaSceneTests.SavedArenaHasConnectedGameplayAndOriginalFourLegHorse",
+          "Status": "Passed",
+          "Duration": 0.4418693,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaSkinTests.ArenaSkinKeepsRightHandAndRemovesOldSpearAndFloatingLeftFragment",
+          "Status": "Passed",
+          "Duration": 0.1844934,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongProjectTests.BattleMaps_HaveInvadersAndRequiredBosses",
+          "Status": "Failed",
+          "Duration": 0.2527386,
+          "Message": "  Expected: greater than or equal to 20\r\n  But was:  0\r\n",
+          "StackTrace": "at ThanhGiongProjectTests+<>c.<BattleMaps_HaveInvadersAndRequiredBosses>b__7_0 (UnityEngine.SceneManagement.Scene scene) [0x00000] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\Editor\\ThanhGiongProjectTests.cs:140\r\nat ThanhGiongProjectTests.WithScene (System.String path, System.Action`1[T] check) [0x00022] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\Editor\\ThanhGiongProjectTests.cs:40\r\nat ThanhGiongProjectTests.BattleMaps_HaveInvadersAndRequiredBosses () [0x00000] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\Editor\\ThanhGiongProjectTests.cs:138\r\n"
+        },
+        {
+          "FullName": "ThanhGiongProjectTests.BuildSettings_ContainsOnlyExistingScenes",
+          "Status": "Passed",
+          "Duration": 0.0025755,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongProjectTests.CombatContracts_ArePresent",
+          "Status": "Passed",
+          "Duration": 0.2189115,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongProjectTests.SceneTransitions_FollowNarrativeOrder",
+          "Status": "Passed",
+          "Duration": 0.1077135,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongProjectTests.WorldMaps_HavePlayerCampaignCameraAndFourLegRig",
+          "Status": "Failed",
+          "Duration": 0.4086616,
+          "Message": "  LangGiongTienTuyen thiếu campaign\r\n  Expected: greater than or equal to 1\r\n  But was:  0\r\n",
+          "StackTrace": "at ThanhGiongProjectTests+<>c__DisplayClass6_0.<WorldMaps_HavePlayerCampaignCameraAndFourLegRig>b__0 (UnityEngine.SceneManagement.Scene scene) [0x00027] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\Editor\\ThanhGiongProjectTests.cs:81\r\nat ThanhGiongProjectTests.WithScene (System.String path, System.Action`1[T] check) [0x00022] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\Editor\\ThanhGiongProjectTests.cs:40\r\nat ThanhGiongProjectTests.WorldMaps_HavePlayerCampaignCameraAndFourLegRig () [0x00023] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\Editor\\ThanhGiongProjectTests.cs:78\r\n"
+        }
+      ],
+      "Duration": 10.5,
+      "StatusPath": null,
+      "Mode": "EditMode",
+      "FilterApplied": "assembly: ThanhGiong",
+      "success": true,
+      "result": null
+    },
+    "target": {
+      "host": "127.0.0.1",
+      "port": 7802,
+      "projectPath": "D:\\School\\PRU\\Game_thanhgiong"
+    },
+    "success": true
+  },
+  "errors": [],
+  "warnings": []
+}

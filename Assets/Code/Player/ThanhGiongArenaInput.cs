@@ -5,11 +5,14 @@ using UnityEngine.InputSystem;
 #endif
 
 /// <summary>One arena input source, also readable by Unity CLI's Input System simulation.</summary>
+[DefaultExecutionOrder(1000)]
 public sealed class ThanhGiongArenaInput : MonoBehaviour
 {
     public static ThanhGiongArenaInput Current { get; private set; }
-    readonly HashSet<KeyCode> pressed = new HashSet<KeyCode>();
+    readonly Dictionary<KeyCode, int> pressed = new Dictionary<KeyCode, int>();
+    readonly List<KeyCode> expired = new List<KeyCode>();
     bool attack;
+    int attackFrame;
 #if ENABLE_INPUT_SYSTEM
     InputActionMap actions;
     void Awake()
@@ -17,10 +20,11 @@ public sealed class ThanhGiongArenaInput : MonoBehaviour
         Current = this; actions = new InputActionMap("PhuDongArena");
         Bind(KeyCode.Return, "enter"); Bind(KeyCode.Escape, "escape"); Bind(KeyCode.E, "e"); Bind(KeyCode.R, "r");
         Bind(KeyCode.C, "c"); Bind(KeyCode.Space, "space"); Bind(KeyCode.LeftAlt, "leftAlt"); Bind(KeyCode.LeftControl, "leftCtrl");
-        actions.AddAction("Attack", InputActionType.Button, "<Mouse>/leftButton").performed += _ => attack = true;
+        Bind(KeyCode.V, "v");
+        actions.AddAction("Attack", InputActionType.Button, "<Mouse>/leftButton").performed += _ => { attack = true; attackFrame = Time.frameCount; };
         actions.Enable();
     }
-    void Bind(KeyCode key, string control) => actions.AddAction(key.ToString(), InputActionType.Button, "<Keyboard>/" + control).performed += _ => pressed.Add(key);
+    void Bind(KeyCode key, string control) => actions.AddAction(key.ToString(), InputActionType.Button, "<Keyboard>/" + control).performed += _ => pressed[key] = Time.frameCount;
     void OnDestroy() { actions?.Dispose(); if (Current == this) Current = null; }
     public static Vector2 Move
     {
@@ -34,6 +38,7 @@ public sealed class ThanhGiongArenaInput : MonoBehaviour
     public static bool Running => Keyboard.current?.leftShiftKey.isPressed == true;
     public static bool OrbitHeld => Mouse.current?.rightButton.isPressed == true;
     public static Vector2 OrbitDelta => Mouse.current != null ? Mouse.current.delta.ReadValue() * .12f : Vector2.zero;
+    public static float ScrollDelta => Mouse.current != null ? Mouse.current.scroll.ReadValue().y / 120f : 0f;
 #else
     void Awake() { Current = this; }
     void OnDestroy() { if (Current == this) Current = null; }
@@ -41,6 +46,7 @@ public sealed class ThanhGiongArenaInput : MonoBehaviour
     public static bool Running => Input.GetKey(KeyCode.LeftShift);
     public static bool OrbitHeld => Input.GetMouseButton(1);
     public static Vector2 OrbitDelta => new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y"));
+    public static float ScrollDelta => Input.mouseScrollDelta.y;
 #endif
     public static bool Down(KeyCode key)
     {
@@ -59,6 +65,13 @@ public sealed class ThanhGiongArenaInput : MonoBehaviour
         return Input.GetMouseButtonDown(0);
 #endif
     }
-    // Inputs while paused or locked must not replay on the next gameplay state.
-    void LateUpdate() { pressed.Clear(); attack = false; }
+    // CLI events can arrive after gameplay Update. Retain them until consumers
+    // have had the following frame, then discard unused paused/locked inputs.
+    void LateUpdate()
+    {
+        expired.Clear();
+        foreach (var key in pressed) if (key.Value < Time.frameCount) expired.Add(key.Key);
+        foreach (var key in expired) pressed.Remove(key);
+        if (attackFrame < Time.frameCount) attack = false;
+    }
 }

@@ -34,8 +34,8 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
             var wave = arena.waveManager;
             GUI.Label(new Rect(435, 96, 800, 30), $"Đợt {wave.WaveIndex + 1}/3   ·   Đã xuất hiện {wave.Spawned}/{wave.waves[wave.WaveIndex].count}   ·   Còn {wave.AliveCount} giặc", small);
         }
-        Panel(new Rect(100, 664, 1080, 38));
-        GUI.Label(new Rect(110, 666, 1060, 32), "WASD: đi   Shift: chạy   Chuột trái: đánh   C: né   E: nhổ tre   Chuột phải: xoay góc nhìn   Esc: tạm dừng", instruction);
+        Panel(new Rect(60, 664, 1160, 38));
+        GUI.Label(new Rect(70, 666, 1140, 32), "WASD: đi   Shift: chạy   Chuột trái: đánh   C: né   E: nhổ tre   V: đổi góc nhìn (Thứ 1/Thứ 3)   Cuộn chuột: zoom   Chuột phải: xoay   Esc: tạm dừng", instruction);
         if (arena.CurrentStage == ThanhGiongArenaFlow.Stage.SeekingBamboo && !arena.NearBamboo)
         {
             Vector3 p = Camera.main != null ? Camera.main.WorldToScreenPoint(arena.bamboo.transform.position + Vector3.up * 4) : Vector3.zero;
@@ -62,6 +62,80 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
             else if (GUI.Button(new Rect(440, 405, 400, 60), "CHƠI LẠI · R", button)) arena.RestartRound();
         }
         GUI.matrix = previous;
+        DrawEnemyHealthBars();
+        DrawAimReticle();
+    }
+
+    void DrawEnemyHealthBars()
+    {
+        if (arena == null || !arena.CanFight || arena.waveManager == null) return;
+        Camera cam = Camera.main;
+        if (cam == null) return;
+        var enemies = arena.waveManager.LivingEnemies;
+        if (enemies == null) return;
+
+        foreach (var enemy in enemies)
+        {
+            if (enemy == null || !enemy.gameObject.activeInHierarchy || enemy.CurrentState == ThanhGiongEnemy.EnemyState.Dead) continue;
+            Vector3 headPos = enemy.transform.position + Vector3.up * 2.2f;
+            Vector3 screen = cam.WorldToScreenPoint(headPos);
+            if (screen.z <= 0.8f || screen.z >= 65f) continue;
+
+            float w = Mathf.Clamp(720f / screen.z, 36f, 75f);
+            float h = Mathf.Clamp(80f / screen.z, 5f, 9f);
+            float x = screen.x - w * 0.5f;
+            float y = Screen.height - screen.y - h;
+
+            Fill(new Rect(x - 1, y - 1, w + 2, h + 2), new Color(0.04f, 0.04f, 0.04f, 0.85f));
+            Fill(new Rect(x, y, w, h), new Color(0.18f, 0.08f, 0.08f, 0.75f));
+
+            float ratio = Mathf.Clamp01(enemy.HealthRatio);
+            Color hpColor = ratio > 0.5f
+                ? Color.Lerp(new Color(0.92f, 0.75f, 0.15f), new Color(0.35f, 0.85f, 0.25f), (ratio - 0.5f) * 2f)
+                : Color.Lerp(new Color(0.85f, 0.18f, 0.15f), new Color(0.92f, 0.75f, 0.15f), ratio * 2f);
+            Fill(new Rect(x, y, w * ratio, h), hpColor);
+
+            if (enemy.isBoss)
+                Fill(new Rect(x - 2, y - 2, w + 4, 1.5f), new Color(1f, 0.85f, 0.2f, 0.95f));
+        }
+    }
+
+    void DrawAimReticle()
+    {
+        if (arena == null || !arena.CanFight || campaign == null || campaign.IsDead) return;
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        bool isFirstPerson = IsometricCameraFollow.Instance != null && IsometricCameraFollow.Instance.arenaCameraMode == IsometricCameraFollow.ArenaCameraMode.FirstPerson;
+        Vector2 screenPoint;
+
+        if (isFirstPerson)
+        {
+            screenPoint = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+        }
+        else
+        {
+            Vector3 aimWorld = arena.transform.position + Vector3.up * 1.25f + arena.transform.forward * 3.4f;
+            Vector3 sp = cam.WorldToScreenPoint(aimWorld);
+            if (sp.z <= 0.2f) return;
+            screenPoint = new Vector2(sp.x, Screen.height - sp.y);
+        }
+
+        bool hasTarget = campaign.HasMeleeTarget();
+
+        Color reticleColor = hasTarget ? new Color(1f, 0.25f, 0.2f, 0.95f) : new Color(1f, 0.92f, 0.65f, 0.75f);
+        Color dotColor = hasTarget ? new Color(1f, 0.15f, 0.1f, 1f) : new Color(1f, 1f, 1f, 0.95f);
+
+        float dotSize = hasTarget ? 6f : 4f;
+        Fill(new Rect(screenPoint.x - dotSize * 0.5f, screenPoint.y - dotSize * 0.5f, dotSize, dotSize), dotColor);
+
+        float spread = hasTarget ? 10f : 8f;
+        float tickLen = 5f;
+        float tickThick = 2f;
+        Fill(new Rect(screenPoint.x - tickThick * 0.5f, screenPoint.y - spread - tickLen, tickThick, tickLen), reticleColor);
+        Fill(new Rect(screenPoint.x - tickThick * 0.5f, screenPoint.y + spread, tickThick, tickLen), reticleColor);
+        Fill(new Rect(screenPoint.x - spread - tickLen, screenPoint.y - tickThick * 0.5f, tickLen, tickThick), reticleColor);
+        Fill(new Rect(screenPoint.x + spread, screenPoint.y - tickThick * 0.5f, tickLen, tickThick), reticleColor);
     }
     static void Panel(Rect rect) => Fill(rect, new Color(.025f, .09f, .075f, .91f));
     static void Fill(Rect rect, Color color) { Color old = GUI.color; GUI.color = color; GUI.DrawTexture(rect, Texture2D.whiteTexture); GUI.color = old; }
