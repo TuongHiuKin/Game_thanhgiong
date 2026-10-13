@@ -1,0 +1,111 @@
+{
+  "status": "completed",
+  "duration": 13.93,
+  "summary": {
+    "total": 14,
+    "passed": 13,
+    "failed": 1,
+    "skipped": 0,
+    "inconclusive": 0
+  },
+  "results": [
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.ActualMeleeDamagesEnemyAndItsDeathAdvancesWave",
+      "Status": "Passed",
+      "Duration": 1.5571854,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.DeathStopsWaveAndRestartFromPauseRecoversRound",
+      "Status": "Passed",
+      "Duration": 1.8308348,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.EnteringBambooDoesNotPullAndERequiresRange",
+      "Status": "Passed",
+      "Duration": 0.6642403,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.FinalWaveRunsCinematicThenVictoryAndRestartRestoresEverything",
+      "Status": "Passed",
+      "Duration": 1.3254712,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.IntroStartsAdultWithIronAndNoEnemies",
+      "Status": "Passed",
+      "Duration": 0.393683,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.PauseFreezesSpawnsTimerAndCombat",
+      "Status": "Passed",
+      "Duration": 1.3448555,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.RestartCancelsCinematicAndRejectsOldDeath",
+      "Status": "Passed",
+      "Duration": 1.362138,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.WaveWaitsForEverySpawnAndCountsDeathOnce",
+      "Status": "Passed",
+      "Duration": 0.8096896,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.ArenaBoundaryDoesNotCollapseCameraDistance",
+      "Status": "Passed",
+      "Duration": 1.11087,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.DamageAndDeathPushEnemyAlongGround",
+      "Status": "Passed",
+      "Duration": 0.8830165,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.OneWheelNotchZoomsTwoMetersAndFirstPersonKeepsEyeHeight",
+      "Status": "Passed",
+      "Duration": 0.4575318,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.ReticleAgreesWithActualMeleeBeyondOldHardcodedRange",
+      "Status": "Passed",
+      "Duration": 0.6560107,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.VInputSurvivesLateFrameAndCyclesExactlyOnce",
+      "Status": "Passed",
+      "Duration": 0.606803,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongPlayModeTests.UndergroundFortress_StartsAsPlayableBattle",
+      "Status": "Failed",
+      "Duration": 0.8183347,
+      "Message": "  Campaign chưa khởi tạo trong Pháo Đài Ngầm\r\n  Expected: not null\r\n  But was:  null\r\n",
+      "StackTrace": "at ThanhGiongPlayModeTests+<UndergroundFortress_StartsAsPlayableBattle>d__1.MoveNext () [0x000cb] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\PlayMode\\ThanhGiongPlayModeTests.cs:34\r\nat UnityEngine.TestTools.TestEnumerator+<Execute>d__8.MoveNext () [0x0003a] in .\\Library\\PackageCache\\com.unity.test-framework@7a3849e09bd0\\UnityEngine.TestRunner\\NUnitExtensions\\Attributes\\TestEnumerator.cs:52\r\n"
+    }
+  ]
+}

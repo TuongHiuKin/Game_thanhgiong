@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "command": "command menu",
+  "data": {
+    "command": "menu",
+    "parameters": {
+      "path": "Tools/Thanh Giong/Build Arena Windows Demo"
+    },
+    "result": {
+      "success": true,
+      "path": "Tools/Thanh Giong/Build Arena Windows Demo",
+      "items": null,
+      "message": "Executed menu item 'Tools/Thanh Giong/Build Arena Windows Demo'"
+    },
+    "target": {
+      "host": "127.0.0.1",
+      "port": 7801,
+      "projectPath": "D:\\School\\PRU\\Game_thanhgiong"
+    },
+    "success": true
+  },
+  "errors": [],
+  "warnings": []
+}

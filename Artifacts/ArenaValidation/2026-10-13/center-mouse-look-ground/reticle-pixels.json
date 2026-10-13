@@ -1,0 +1,22 @@
+[
+  {
+    "file": "center-look-left",
+    "width": 1280,
+    "height": 720,
+    "centerRgb": [
+      249,
+      248,
+      246
+    ]
+  },
+  {
+    "file": "center-look-right",
+    "width": 1280,
+    "height": 720,
+    "centerRgb": [
+      249,
+      248,
+      246
+    ]
+  }
+]

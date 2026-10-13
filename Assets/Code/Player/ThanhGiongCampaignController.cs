@@ -749,6 +749,45 @@ public class ThanhGiongCampaignController : MonoBehaviour
         Attack();return true;
     }
 
+    float MeleeRadius(MeleeProfile profile) => profile.Radius * (1f + GrowthPhase * .15f);
+    public Vector3 MeleeAimDirection
+    {
+        get
+        {
+            var cam = Camera.main;
+            if (!IsArena || cam == null) return transform.forward;
+            // The fixed center reticle defines the strike direction in all views.
+            var ray = cam.ViewportPointToRay(new Vector3(.5f, .5f, 0));
+            var plane = new Plane(Vector3.up, transform.position + Vector3.up * 1.25f);
+            if (!plane.Raycast(ray, out float distance) || distance > 500f)
+            {
+                Vector3 flatView = Vector3.ProjectOnPlane(cam.transform.forward, Vector3.up);
+                return flatView.sqrMagnitude > .01f ? flatView.normalized : transform.forward;
+            }
+            Vector3 direction = Vector3.ProjectOnPlane(ray.GetPoint(distance) - transform.position, Vector3.up);
+            return direction.sqrMagnitude > .01f ? direction.normalized : transform.forward;
+        }
+    }
+    Vector3 MeleeCenter(MeleeProfile profile, Vector3 direction) => profile.Bamboo ? transform.position : transform.position + direction * profile.ForwardReach;
+    bool IsMeleeTarget(ThanhGiongEnemy enemy, MeleeProfile profile, Vector3 direction)
+    {
+        if (enemy == null || !enemy.gameObject.activeInHierarchy || enemy.HealthRatio <= 0) return false;
+        Vector3 flat = Vector3.ProjectOnPlane(enemy.transform.position - transform.position, Vector3.up);
+        return profile.Bamboo || flat.sqrMagnitude <= .01f || Vector3.Dot(direction, flat.normalized) >= profile.ArcDot;
+    }
+
+    // The HUD uses the same collider query, growth, weapon variant and arc as a strike.
+    public bool HasMeleeTarget()
+    {
+        if (CurrentWeapon == Weapon.None || IsDead) return false;
+        MeleeProfile profile = GetMeleeProfile(CurrentWeapon == Weapon.Bamboo);
+        Vector3 direction = MeleeAimDirection;
+        int count = Physics.OverlapSphereNonAlloc(MeleeCenter(profile, direction), MeleeRadius(profile), hits, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+            if (IsMeleeTarget(hits[i].GetComponentInParent<ThanhGiongEnemy>(), profile, direction)) return true;
+        return false;
+    }
+
     private void Attack()
     {
         if (CurrentWeapon == Weapon.None || movement.IsDodging) return;
@@ -758,10 +797,10 @@ public class ThanhGiongCampaignController : MonoBehaviour
         nextAttackTime=Time.time+profile.Cooldown;
         movement.TriggerCampaignAttack(profile.AttackDuration);
         if(pendingStrike!=null)StopCoroutine(pendingStrike);
-        pendingStrike=StartCoroutine(ResolveMeleeStrike(profile,comboBeat));
+        pendingStrike=StartCoroutine(ResolveMeleeStrike(profile,comboBeat,MeleeAimDirection));
     }
 
-    private IEnumerator ResolveMeleeStrike(MeleeProfile profile,int beat)
+    private IEnumerator ResolveMeleeStrike(MeleeProfile profile,int beat,Vector3 direction)
     {
         float windup=0;
         while(windup<.12f) {
@@ -771,11 +810,10 @@ public class ThanhGiongCampaignController : MonoBehaviour
         while(Time.timeScale<=0)yield return null;
         if(!IsBattleActive||movement.IsDodging){pendingStrike=null;yield break;}
         CharacterController cc=GetComponent<CharacterController>();
-        if(cc!=null&&cc.enabled&&cc.isGrounded)cc.Move(transform.forward*(beat==3?.5f:.3f));
-        float growthMultiplier = 1f + GrowthPhase * 0.15f;
-        float radius = profile.Radius * growthMultiplier;
+        if(cc!=null&&cc.enabled&&cc.isGrounded)cc.Move(direction*(beat==3?.5f:.3f));
+        float radius = MeleeRadius(profile);
 
-        Vector3 center = profile.Bamboo ? transform.position : transform.position + transform.forward * profile.ForwardReach;
+        Vector3 center = MeleeCenter(profile, direction);
         int count = Physics.OverlapSphereNonAlloc(center, radius, hits, ~0, QueryTriggerInteraction.Ignore);
         int struck = 0;
         struckEnemies.Clear();
@@ -783,10 +821,9 @@ public class ThanhGiongCampaignController : MonoBehaviour
         for (int i = 0; i < count; i++)
         {
             ThanhGiongEnemy enemy = hits[i].GetComponentInParent<ThanhGiongEnemy>();
-            if (enemy == null || !enemy.gameObject.activeSelf || enemy.HealthRatio <= 0) continue;
+            if (!IsMeleeTarget(enemy, profile, direction)) continue;
             Vector3 toEnemy = enemy.transform.position - transform.position;
             Vector3 flatToEnemy = Vector3.ProjectOnPlane(toEnemy, Vector3.up);
-            if (!profile.Bamboo && flatToEnemy.sqrMagnitude > 0.01f && Vector3.Dot(transform.forward, flatToEnemy.normalized) < profile.ArcDot) continue;
             if (!struckEnemies.Add(enemy)) continue;
 
             float damage = CalculateMeleeDamage(profile, enemy, flatToEnemy.magnitude, radius, beat);
@@ -806,17 +843,17 @@ public class ThanhGiongCampaignController : MonoBehaviour
             IsometricCameraFollow.Instance?.Shake(shake, profile.Bamboo ? 0.55f : 0.35f);
         }
 
-        combatFeedback?.PlayAttack(profile.Bamboo, radius);
+        combatFeedback?.PlayAttack(profile.Bamboo, radius, direction);
         if (profile.Bamboo)
         {
             vfx?.PlayBambooSweep(transform, radius);
-            if (CurrentBambooVariant == BambooVariant.FireBamboo && struck > 0) vfx?.PlayFireLine(transform, Mathf.Min(16f, radius * 2.2f));
+            if (CurrentBambooVariant == BambooVariant.FireBamboo && struck > 0) vfx?.PlayFireLine(transform, Mathf.Min(16f, radius * 2.2f), direction);
             if (CurrentBambooVariant == BambooVariant.HeavyRoot && struck > 0) IsometricCameraFollow.Instance?.Shake(.75f, .65f);
             audioFx?.PlayBamboo();
         }
         else
         {
-            vfx?.PlayCalligraphySlash(transform, radius);
+            vfx?.PlayCalligraphySlash(transform, radius, direction);
             audioFx?.PlaySlash();
         }
         pendingStrike=null;

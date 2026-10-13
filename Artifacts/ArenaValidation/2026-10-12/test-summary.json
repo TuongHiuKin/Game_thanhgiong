@@ -1,0 +1,28 @@
+{
+  "originalArena": {
+    "total": 13,
+    "passed": 13
+  },
+  "additionalRegression": {
+    "total": 6,
+    "passed": 6
+  },
+  "arenaTotal": 19,
+  "arenaPassed": 19,
+  "projectTotal": 25,
+  "projectPassed": 22,
+  "legacyFailures": [
+    {
+      "FullName": "ThanhGiongProjectTests.BattleMaps_HaveInvadersAndRequiredBosses",
+      "Message": "  Expected: greater than or equal to 20\r\n  But was:  0\r\n"
+    },
+    {
+      "FullName": "ThanhGiongProjectTests.WorldMaps_HavePlayerCampaignCameraAndFourLegRig",
+      "Message": "  LangGiongTienTuyen thiếu campaign\r\n  Expected: greater than or equal to 1\r\n  But was:  0\r\n"
+    },
+    {
+      "FullName": "ThanhGiongPlayModeTests.UndergroundFortress_StartsAsPlayableBattle",
+      "Message": "  Campaign chưa khởi tạo trong Pháo Đài Ngầm\r\n  Expected: not null\r\n  But was:  null\r\n"
+    }
+  ]
+}

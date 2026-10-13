@@ -1,0 +1,65 @@
+{
+  "success": true,
+  "command": "command run_tests",
+  "data": {
+    "command": "run_tests",
+    "parameters": {
+      "mode": "editor",
+      "filter": "ThanhGiongArena",
+      "filter_type": "testName"
+    },
+    "result": {
+      "Summary": {
+        "Total": 4,
+        "Passed": 4,
+        "Failed": 0,
+        "Skipped": 0,
+        "Inconclusive": 0
+      },
+      "Results": [
+        {
+          "FullName": "ThanhGiongArenaSceneTests.ArenaIsFirstSceneAndKeepsPreviousWorlds",
+          "Status": "Passed",
+          "Duration": 0.0256321,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaSceneTests.GroundColliderCannotRenderThroughGrass",
+          "Status": "Passed",
+          "Duration": 0.0996749,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaSceneTests.SavedArenaHasConnectedGameplayAndOriginalFourLegHorse",
+          "Status": "Passed",
+          "Duration": 0.390665,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaSkinTests.ArenaSkinKeepsRightHandAndRemovesOldSpearAndFloatingLeftFragment",
+          "Status": "Passed",
+          "Duration": 0.5984741,
+          "Message": null,
+          "StackTrace": null
+        }
+      ],
+      "Duration": 9.08,
+      "StatusPath": null,
+      "Mode": "EditMode",
+      "FilterApplied": "testname: ThanhGiongArena",
+      "success": true,
+      "result": null
+    },
+    "target": {
+      "host": "127.0.0.1",
+      "port": 7801,
+      "projectPath": "D:\\School\\PRU\\Game_thanhgiong"
+    },
+    "success": true
+  },
+  "errors": [],
+  "warnings": []
+}

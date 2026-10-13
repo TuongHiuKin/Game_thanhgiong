@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "command": "command run_script",
+  "data": {
+    "command": "run_script",
+    "parameters": {
+      "file": "Tools/UnityDiagnostics/ArenaMouseGroundReview.cs",
+      "entry": "ArenaMouseGroundReview.CaptureRight"
+    },
+    "result": {
+      "diagnostics": [],
+      "compileMs": 60,
+      "executeMs": 5,
+      "assemblyName": "PipelineRunScript_ArenaMouseGroundReview_f0edb89540f3458f979bcbdc23e1bdf3",
+      "success": true,
+      "result": "{\"name\":\"center-look-right.png\",\"width\":1280,\"height\":720,\"reticle\":\"(640.00, 360.00)\",\"yaw\":21.59999,\"pitch\":32.8,\"cursorLocked\":\"Locked\",\"rotation\":\"(32.80, 21.60, 0.00)\"}"
+    },
+    "target": {
+      "host": "127.0.0.1",
+      "port": 7801,
+      "projectPath": "D:\\School\\PRU\\Game_thanhgiong"
+    },
+    "success": true
+  },
+  "errors": [],
+  "warnings": []
+}

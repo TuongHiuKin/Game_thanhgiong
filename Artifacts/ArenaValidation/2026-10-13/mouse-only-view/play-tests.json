@@ -1,0 +1,148 @@
+{
+  "success": true,
+  "command": "command test_status",
+  "data": {
+    "command": "test_status",
+    "parameters": {},
+    "result": {
+      "status": "completed",
+      "duration": 24.86,
+      "summary": {
+        "total": 17,
+        "passed": 17,
+        "failed": 0,
+        "skipped": 0,
+        "inconclusive": 0
+      },
+      "results": [
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.ActualMeleeDamagesEnemyAndItsDeathAdvancesWave",
+          "Status": "Passed",
+          "Duration": 1.3231475,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.DeathStopsWaveAndRestartFromPauseRecoversRound",
+          "Status": "Passed",
+          "Duration": 1.8609835,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.EnteringBambooDoesNotPullAndERequiresRange",
+          "Status": "Passed",
+          "Duration": 0.7476588,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.FinalWaveRunsCinematicThenVictoryAndRestartRestoresEverything",
+          "Status": "Passed",
+          "Duration": 1.3391924,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.IntroStartsAdultWithIronAndNoEnemies",
+          "Status": "Passed",
+          "Duration": 0.3872047,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.PauseFreezesSpawnsTimerAndCombat",
+          "Status": "Passed",
+          "Duration": 1.3561174,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.RestartCancelsCinematicAndRejectsOldDeath",
+          "Status": "Passed",
+          "Duration": 1.3821792,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPlayModeTests.WaveWaitsForEverySpawnAndCountsDeathOnce",
+          "Status": "Passed",
+          "Duration": 0.8075379,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.ArenaBackwardInputDoesNotFlipHorseOrCamera",
+          "Status": "Passed",
+          "Duration": 0.9746907,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.ArenaBoundaryDoesNotCollapseCameraDistance",
+          "Status": "Passed",
+          "Duration": 1.12478,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.CenterAimHitsSideTargetAndLatchesDirectionDuringWindup",
+          "Status": "Passed",
+          "Duration": 0.7146334,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.DamageAndDeathPushEnemyAlongGround",
+          "Status": "Passed",
+          "Duration": 0.8547553,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.MouseLookRotatesAllViewsWithoutRightButtonAndReticleStaysCentered",
+          "Status": "Passed",
+          "Duration": 2.3303125,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.OneWheelNotchZoomsTwoMetersAndFirstPersonKeepsEyeHeight",
+          "Status": "Passed",
+          "Duration": 0.4535452,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.ReticleAgreesWithActualMeleeBeyondOldHardcodedRange",
+          "Status": "Passed",
+          "Duration": 0.6323723,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.VInputSurvivesLateFrameAndCyclesExactlyOnce",
+          "Status": "Passed",
+          "Duration": 0.6036735,
+          "Message": null,
+          "StackTrace": null
+        },
+        {
+          "FullName": "ThanhGiongArenaPresentationTests.WasdMovesRelativeToViewWithoutRotatingCameraInAllModes",
+          "Status": "Passed",
+          "Duration": 7.8802325,
+          "Message": null,
+          "StackTrace": null
+        }
+      ]
+    },
+    "target": {
+      "host": "127.0.0.1",
+      "port": 7801,
+      "projectPath": "D:\\School\\PRU\\Game_thanhgiong"
+    },
+    "success": true
+  },
+  "errors": [],
+  "warnings": []
+}

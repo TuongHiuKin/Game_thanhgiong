@@ -41,14 +41,14 @@ public sealed class GodotCombatFeedback : MonoBehaviour
         foreach (Renderer renderer in expired) flashes.Remove(renderer);
     }
 
-    public void PlayAttack(bool bamboo, float radius)
+    public void PlayAttack(bool bamboo, float radius, Vector3? aimDirection = null)
     {
         if (effectMaterial == null) return;
-        StartCoroutine(AttackStroke(bamboo, radius));
+        StartCoroutine(AttackStroke(bamboo, radius, aimDirection ?? transform.forward));
         if (bamboo) Debris(transform.position + Vector3.up * 1.2f, new Color(.43f, .64f, .12f), true, 5);
     }
 
-    private IEnumerator AttackStroke(bool bamboo, float radius)
+    private IEnumerator AttackStroke(bool bamboo, float radius, Vector3 direction)
     {
         GameObject stroke = new GameObject("Godot Attack Trail");
         stroke.transform.SetParent(transform, false);
@@ -59,7 +59,7 @@ public sealed class GodotCombatFeedback : MonoBehaviour
         line.widthCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
         Color color = bamboo ? new Color(.68f, 1f, .3f) : new Color(1f, .82f, .15f);
         Vector3 origin = transform.position + Vector3.up * 1.2f;
-        Vector3 right = transform.right, forward = transform.forward;
+        Vector3 forward = direction.normalized, right = Vector3.Cross(Vector3.up, forward);
         float age = 0;
         while (age < .36f) {
             age += Time.deltaTime;

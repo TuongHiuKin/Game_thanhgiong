@@ -46,7 +46,7 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
         if (col != null) col.enabled = true;
     }
 
-    public void ApplyKnockback(Vector3 impactPoint, Vector3 direction, float force, float upwardLift = 1.4f)
+    public void ApplyKnockback(Vector3 impactPoint, Vector3 direction, float force, float upwardLift = 0f)
     {
         if (isLaunched || !gameObject.activeInHierarchy) return;
         StopAllCoroutines();
@@ -55,59 +55,51 @@ public class ThanhGiongRagdollPhysics : MonoBehaviour
 
     private IEnumerator KnockbackRoutine(Vector3 impactPoint, Vector3 direction, float force, float upwardLift)
     {
-        // Unfreeze constraints during impact to allow natural ragdoll tumble
-        rb.constraints = RigidbodyConstraints.None;
+        // Maintain upright posture during knockback (stumble backwards, no tumbling or flying up)
+        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         Vector3 flatAway = Vector3.ProjectOnPlane(transform.position - impactPoint, Vector3.up);
         if (flatAway.sqrMagnitude < 0.01f) flatAway = Vector3.ProjectOnPlane(direction, Vector3.up);
         if (flatAway.sqrMagnitude < 0.01f) flatAway = -transform.forward;
-        Vector3 launchDir = (flatAway.normalized + Vector3.up * Mathf.Clamp(upwardLift, 0.4f, 2.2f)).normalized;
-        float cappedForce = Mathf.Min(Mathf.Max(0f, force), maxImpactSpeed);
-        rb.linearVelocity = launchDir * cappedForce;
-        rb.AddTorque(Random.insideUnitSphere * (cappedForce * 2.2f), ForceMode.Impulse);
+        Vector3 launchDir = flatAway.normalized;
+        float cappedForce = Mathf.Min(Mathf.Max(0f, force), maxImpactSpeed * 0.75f);
+        rb.linearVelocity = new Vector3(launchDir.x * cappedForce, 0f, launchDir.z * cappedForce);
 
-        yield return new WaitForSeconds(0.4f);
-
-        // Recover and smoothly return to upright stance
-        float recoverTimer = 0f;
-        Quaternion startRot = transform.rotation;
-        Quaternion uprightRot = Quaternion.Euler(0f, startRot.eulerAngles.y, 0f);
-
-        while (recoverTimer < 0.45f && !isLaunched)
+        // Smoothly slide / stumble backwards and recover
+        float timer = 0f;
+        while (timer < 0.45f && !isLaunched)
         {
-            recoverTimer += Time.deltaTime;
-            float t = recoverTimer / 0.45f;
-            transform.rotation = Quaternion.Slerp(startRot, uprightRot, t);
-            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, t);
+            timer += Time.deltaTime;
+            float t = timer / 0.45f;
+            rb.linearVelocity = Vector3.Lerp(rb.linearVelocity, Vector3.zero, t * 2f);
             yield return null;
         }
 
         if (!isLaunched)
         {
-            transform.rotation = uprightRot;
-            rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            rb.linearVelocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
     }
 
-    public void LaunchOnDeath(Vector3 impactOrigin, float force = 18f, float lift = 4.2f)
+    public void LaunchOnDeath(Vector3 impactOrigin, float force = 12f, float lift = 0f)
     {
         if (isLaunched || !gameObject.activeInHierarchy) return;
         isLaunched = true;
         StopAllCoroutines();
-        StartCoroutine(DeathLaunchRoutine(impactOrigin, force, lift));
+        StartCoroutine(DeathLaunchRoutine(impactOrigin, force, Mathf.Min(lift, 0.5f)));
     }
 
     private IEnumerator DeathLaunchRoutine(Vector3 impactOrigin, float force, float lift)
     {
-        rb.constraints = RigidbodyConstraints.None;
         Vector3 away = (transform.position - impactOrigin).normalized;
         away.y = 0f;
         if (away.sqrMagnitude < 0.01f) away = -transform.forward;
 
-        float cappedForce = Mathf.Min(Mathf.Max(0f, force), maxDeathLaunchSpeed);
-        Vector3 impulse = (away + Vector3.up * lift).normalized * cappedForce;
+        float cappedForce = Mathf.Min(Mathf.Max(0f, force), 14f);
+        Vector3 impulse = away.normalized * cappedForce;
+        rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         rb.linearVelocity = impulse;
-        rb.AddTorque(Random.insideUnitSphere * (cappedForce * 2.8f), ForceMode.Impulse);
+        rb.AddTorque(Vector3.up * Random.Range(-cappedForce, cappedForce), ForceMode.Impulse);
 
         // A short physical impact preserves hit weight, then every enemy dissolves
         // into rising golden ash instead of ending as a plain ragdoll.

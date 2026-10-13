@@ -1,6 +1,6 @@
 {
   "name": "ThanhGiong.PlayModeTests",
-  "references": [],
+  "references": ["Unity.InputSystem"],
   "optionalUnityReferences": ["TestAssemblies"],
   "autoReferenced": false
 }

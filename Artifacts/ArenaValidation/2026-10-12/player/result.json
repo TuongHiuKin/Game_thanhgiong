@@ -1,0 +1,19 @@
+{
+    "verdict": "PASS",
+    "runtimeErrors": 0,
+    "failures": [],
+    "cameraModes": [
+        "ThirdPersonFar",
+        "ThirdPersonClose",
+        "FirstPerson",
+        "ThirdPersonFar"
+    ],
+    "zoomBefore": 15.5,
+    "zoomAfter": 13.5,
+    "boundaryDistance": 15.505003929138184,
+    "movedMeters": 37.76538848876953,
+    "eyeHeight": 3.250033378601074,
+    "damageDisplacement": 0.13204458355903625,
+    "damageRise": 8.344650268554688e-7,
+    "deathRise": 3.5762786865234375e-7
+}

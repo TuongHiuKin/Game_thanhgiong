@@ -42,4 +42,21 @@ public class ThanhGiongArenaSceneTests
         }
         finally { EditorSceneManager.ClosePreviewScene(scene); }
     }
+
+    [Test] public void GroundColliderCannotRenderThroughGrass()
+    {
+        var scene = EditorSceneManager.OpenPreviewScene(Path);
+        try
+        {
+            var objects = scene.GetRootGameObjects().SelectMany(r => r.GetComponentsInChildren<Transform>(true)).ToArray();
+            var ground = objects.Single(t => t.name == "Walkable ground");
+            var grass = objects.Single(t => t.name == "Grass plain").GetComponent<Renderer>();
+            var field = objects.Single(t => t.name == "Central battlefield").GetComponent<Renderer>();
+            Assert.IsTrue(ground.GetComponent<Collider>().enabled, "The physical arena floor must remain solid.");
+            Assert.IsFalse(ground.GetComponent<Renderer>().enabled, "Coplanar brown/green surfaces must never both render.");
+            Assert.IsTrue(grass.enabled); Assert.IsTrue(field.enabled);
+            Assert.Greater(field.bounds.max.y - grass.bounds.max.y, .015f, "The visible dirt field must clear the grass.");
+        }
+        finally { EditorSceneManager.ClosePreviewScene(scene); }
+    }
 }

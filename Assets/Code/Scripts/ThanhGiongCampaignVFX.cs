@@ -27,9 +27,9 @@ public class ThanhGiongCampaignVFX : MonoBehaviour
         StartCoroutine(DongSonSunBurst(target.position, 12, 5.5f, new Color(1f, .85f, .2f, .85f), .6f));
     }
 
-    public void PlayCalligraphySlash(Transform target, float range)
+    public void PlayCalligraphySlash(Transform target, float range, Vector3? aimDirection = null)
     {
-        StartCoroutine(CalligraphyStroke(target.position + Vector3.up * 1.2f, target.forward, range));
+        StartCoroutine(CalligraphyStroke(target.position + Vector3.up * 1.2f, aimDirection ?? target.forward, range));
     }
 
     public void PlayBambooSweep(Transform target, float radius)
@@ -39,10 +39,10 @@ public class ThanhGiongCampaignVFX : MonoBehaviour
         StartCoroutine(Ring(target.position + Vector3.up * .55f, .4f, radius * 1.15f, new Color(.85f, 1f, .3f, .85f), .5f));
     }
 
-    public void PlayFireLine(Transform target, float length)
+    public void PlayFireLine(Transform target, float length, Vector3? aimDirection = null)
     {
         IsometricCameraFollow.Instance?.Shake(0.85f, 0.95f);
-        StartCoroutine(FireLine(target.position + Vector3.up * .3f, target.forward, length));
+        StartCoroutine(FireLine(target.position + Vector3.up * .3f, aimDirection ?? target.forward, length));
     }
 
     public void PlaySwordBreak(Transform target)

@@ -110,6 +110,9 @@ public class ThanhGiongArenaPlayModeTests
         ((Behaviour)enemy).enabled = false;
         Call(campaign, "TeleportPlayer", enemy.transform.position - Vector3.forward * 1.5f);
         campaign.transform.rotation = Quaternion.identity; Physics.SyncTransforms();
+        var follow = Camera.main.GetComponent(T("IsometricCameraFollow")); Call(follow, "SnapToTarget");
+        enemy.GetComponent<Rigidbody>().position = arena.transform.position + (Vector3)P(campaign, "MeleeAimDirection") * 1.5f;
+        Physics.SyncTransforms();
         Assert.IsTrue((bool)Call(campaign, "TryMeleeAttack"));
         yield return new WaitForSeconds(.35f);
         Assert.AreEqual(1, P(campaign, "Kills")); Assert.AreEqual(1, P(waves, "WaveIndex"));
@@ -122,7 +125,11 @@ public class ThanhGiongArenaPlayModeTests
         for (int i = 0; i < 3; i++) Call(arena, "TryPullBamboo");
         yield return WaitEnemy(); Assert.AreEqual("BambooCombat", Stage); Kill(Living[0]);
         Assert.AreEqual("VictoryCinematic", Stage); Assert.IsFalse((bool)P(campaign, "IsBattleActive"));
-        yield return new WaitForSeconds(.6f); Assert.AreEqual("Victory", Stage);
+        // A busy editor can resume the test before the cinematic coroutine on
+        // the same frame. Wait for its observable result with a bounded deadline.
+        float deadline = Time.realtimeSinceStartup + 2f;
+        while (Stage == "VictoryCinematic" && Time.realtimeSinceStartup < deadline) yield return null;
+        Assert.AreEqual("Victory", Stage);
         Call(arena, "RestartRound"); yield return null;
         Assert.AreEqual("Intro", Stage); Assert.IsTrue(bamboo.gameObject.activeSelf);
         Assert.AreEqual(0, P(campaign, "Kills")); Assert.AreEqual(0, P(arena, "BambooPulls"));

@@ -1131,7 +1131,7 @@ public class ThanhGiongEnemy : MonoBehaviour
                 float damageRatio = Mathf.Sqrt(Mathf.Clamp01(actualDamage / Mathf.Max(1f, maxHealth)));
                 float baseKnockPower = isBoss ? 5.2f : 9.5f;
                 float knockPower = baseKnockPower * Mathf.Clamp(impactScale, 0.35f, 2.1f) * Mathf.Lerp(0.85f, 1.55f, damageRatio) * vulnerabilityDrag;
-                float lift = heavyImpact ? 1.65f : 1.18f;
+                float lift = 0f;
                 ragdoll.ApplyKnockback(source, transform.position - source, knockPower, lift);
             }
             return;
@@ -1146,7 +1146,7 @@ public class ThanhGiongEnemy : MonoBehaviour
 
         if (ragdoll != null)
         {
-            ragdoll.LaunchOnDeath(source, isBoss ? 14f : 24f, isBoss ? 3.0f : 5.0f);
+            ragdoll.LaunchOnDeath(source, isBoss ? 10f : 13f, 0f);
         }
         else
         {

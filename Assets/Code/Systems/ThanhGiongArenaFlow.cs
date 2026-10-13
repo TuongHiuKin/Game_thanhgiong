@@ -17,6 +17,7 @@ public sealed class ThanhGiongArenaFlow : MonoBehaviour
     public float ElapsedSeconds { get; private set; }
     public bool Paused { get; private set; }
     public bool CanFight => !Paused && (CurrentStage == Stage.IronCombat || CurrentStage == Stage.BambooCombat);
+    public bool MouseLookActive => !Paused && (CanFight || CurrentStage == Stage.SeekingBamboo);
     public bool InRound => CurrentStage != Stage.Intro && CurrentStage != Stage.Victory && CurrentStage != Stage.Defeat;
     public bool NearBamboo => bamboo != null && bamboo.gameObject.activeInHierarchy &&
         Vector3.ProjectOnPlane(bamboo.transform.position - transform.position, Vector3.up).sqrMagnitude <= interactionDistance * interactionDistance;

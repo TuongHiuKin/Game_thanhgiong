@@ -1,0 +1,104 @@
+{
+  "status": "completed",
+  "duration": 13.47,
+  "summary": {
+    "total": 13,
+    "passed": 12,
+    "failed": 1,
+    "skipped": 0,
+    "inconclusive": 0
+  },
+  "results": [
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.ActualMeleeDamagesEnemyAndItsDeathAdvancesWave",
+      "Status": "Passed",
+      "Duration": 1.4146173,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.DeathStopsWaveAndRestartFromPauseRecoversRound",
+      "Status": "Passed",
+      "Duration": 1.8933433,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.EnteringBambooDoesNotPullAndERequiresRange",
+      "Status": "Passed",
+      "Duration": 0.6879028,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.FinalWaveRunsCinematicThenVictoryAndRestartRestoresEverything",
+      "Status": "Failed",
+      "Duration": 1.4451529,
+      "Message": "  Expected string length 7 but was 16. Strings differ at index 7.\r\n  Expected: \"Victory\"\r\n  But was:  \"VictoryCinematic\"\r\n  ------------------^\r\n",
+      "StackTrace": "at ThanhGiongArenaPlayModeTests+<FinalWaveRunsCinematicThenVictoryAndRestartRestoresEverything>d__21.MoveNext () [0x0013c] in D:\\School\\PRU\\Game_thanhgiong\\Assets\\Tests\\PlayMode\\ThanhGiongArenaPlayModeTests.cs:125\r\nat UnityEngine.TestTools.TestEnumerator+<Execute>d__8.MoveNext () [0x0003a] in .\\Library\\PackageCache\\com.unity.test-framework@7a3849e09bd0\\UnityEngine.TestRunner\\NUnitExtensions\\Attributes\\TestEnumerator.cs:52\r\n"
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.IntroStartsAdultWithIronAndNoEnemies",
+      "Status": "Passed",
+      "Duration": 0.4169478,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.PauseFreezesSpawnsTimerAndCombat",
+      "Status": "Passed",
+      "Duration": 1.385733,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.RestartCancelsCinematicAndRejectsOldDeath",
+      "Status": "Passed",
+      "Duration": 1.4012198,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.WaveWaitsForEverySpawnAndCountsDeathOnce",
+      "Status": "Passed",
+      "Duration": 0.8564697,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.ArenaBoundaryDoesNotCollapseCameraDistance",
+      "Status": "Passed",
+      "Duration": 1.3047373,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.DamageAndDeathPushEnemyAlongGround",
+      "Status": "Passed",
+      "Duration": 0.8995069,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.OneWheelNotchZoomsTwoMetersAndFirstPersonKeepsEyeHeight",
+      "Status": "Passed",
+      "Duration": 0.449118,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.ReticleAgreesWithActualMeleeBeyondOldHardcodedRange",
+      "Status": "Passed",
+      "Duration": 0.6251416,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.VInputSurvivesLateFrameAndCyclesExactlyOnce",
+      "Status": "Passed",
+      "Duration": 0.5990219,
+      "Message": null,
+      "StackTrace": null
+    }
+  ]
+}

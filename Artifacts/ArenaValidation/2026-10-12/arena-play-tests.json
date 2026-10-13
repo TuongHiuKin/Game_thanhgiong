@@ -1,0 +1,104 @@
+{
+  "status": "completed",
+  "duration": 12.79,
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0,
+    "skipped": 0,
+    "inconclusive": 0
+  },
+  "results": [
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.ActualMeleeDamagesEnemyAndItsDeathAdvancesWave",
+      "Status": "Passed",
+      "Duration": 1.3067683,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.DeathStopsWaveAndRestartFromPauseRecoversRound",
+      "Status": "Passed",
+      "Duration": 1.8358224,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.EnteringBambooDoesNotPullAndERequiresRange",
+      "Status": "Passed",
+      "Duration": 0.6567555,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.FinalWaveRunsCinematicThenVictoryAndRestartRestoresEverything",
+      "Status": "Passed",
+      "Duration": 1.3248404,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.IntroStartsAdultWithIronAndNoEnemies",
+      "Status": "Passed",
+      "Duration": 0.3857046,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.PauseFreezesSpawnsTimerAndCombat",
+      "Status": "Passed",
+      "Duration": 1.333017,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.RestartCancelsCinematicAndRejectsOldDeath",
+      "Status": "Passed",
+      "Duration": 1.3786994,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPlayModeTests.WaveWaitsForEverySpawnAndCountsDeathOnce",
+      "Status": "Passed",
+      "Duration": 0.8061813,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.ArenaBoundaryDoesNotCollapseCameraDistance",
+      "Status": "Passed",
+      "Duration": 1.1055406,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.DamageAndDeathPushEnemyAlongGround",
+      "Status": "Passed",
+      "Duration": 0.8808632,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.OneWheelNotchZoomsTwoMetersAndFirstPersonKeepsEyeHeight",
+      "Status": "Passed",
+      "Duration": 0.4564408,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.ReticleAgreesWithActualMeleeBeyondOldHardcodedRange",
+      "Status": "Passed",
+      "Duration": 0.6324854,
+      "Message": null,
+      "StackTrace": null
+    },
+    {
+      "FullName": "ThanhGiongArenaPresentationTests.VInputSurvivesLateFrameAndCyclesExactlyOnce",
+      "Status": "Passed",
+      "Duration": 0.605733,
+      "Message": null,
+      "StackTrace": null
+    }
+  ]
+}
