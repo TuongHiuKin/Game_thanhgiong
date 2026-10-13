@@ -138,7 +138,6 @@ public class ThanhGiongArenaPresentationTests
         }
         InputSystem.QueueStateEvent(keyboard, new KeyboardState());
         Assert.Greater(Vector3.Distance(start, arena.transform.position), .5f);
-        Assert.Greater(Mathf.Abs(Mathf.DeltaAngle(0, arena.transform.eulerAngles.y)), 45f);
         yield return new WaitForSeconds(.8f);
         float frozenYaw = (float)F(camera, "arenaYaw");
         Call(arena, "SetPaused", true); yield return null;
@@ -154,6 +153,7 @@ public class ThanhGiongArenaPresentationTests
     {
         yield return Enemy();
         arena.transform.rotation = Quaternion.Euler(0, 90, 0);
+        camera.GetType().GetField("arenaYaw").SetValue(camera, 90f);
         Call(camera, "SnapToTarget");
         Vector3 start = arena.transform.position;
         InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.S));
@@ -216,6 +216,37 @@ public class ThanhGiongArenaPresentationTests
         Assert.IsFalse((bool)Call(campaign, "HasMeleeTarget"));
         yield return new WaitForSeconds(.25f);
         Assert.Less((float)P(e, "HealthRatio"), hp, "An attack must keep the aim captured on click.");
-        Assert.AreEqual(0f, Mathf.DeltaAngle(0, arena.transform.eulerAngles.y), .01f, "Mouse aim must not create camera/horse rotation feedback.");
+        Assert.AreEqual(-90f, (float)F(camera, "arenaYaw"), .01f, "Horse rotation must not feed back into mouse yaw.");
+    }
+
+    [UnityTest] public IEnumerator WasdMovesRelativeToViewWithoutRotatingCameraInAllModes()
+    {
+        yield return Enemy();
+        foreach (int mode in new[] { 0, 1, 2 })
+        {
+            Mode(mode); camera.GetType().GetField("arenaYaw").SetValue(camera, 37f); Call(camera, "SnapToTarget");
+            yield return new WaitForSeconds(.2f);
+            Quaternion view = Camera.main.transform.rotation;
+            Vector3 forward = Vector3.ProjectOnPlane(Camera.main.transform.forward, Vector3.up).normalized;
+            Vector3 right = Vector3.ProjectOnPlane(Camera.main.transform.right, Vector3.up).normalized;
+            foreach (var key in new[] { Key.W, Key.A, Key.S, Key.D })
+            {
+                Call(campaign, "TeleportPlayer", new Vector3(0, .08f, -8));
+                Call(arena.GetComponent(T("MountedHorseController")), "ResetMovementState");
+                arena.transform.rotation = Quaternion.Euler(0, 140, 0); // View must ignore facing changes too.
+                Vector3 start = arena.transform.position;
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState(key));
+                yield return new WaitForSeconds(.35f);
+                InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+                Vector3 travel = Vector3.ProjectOnPlane(arena.transform.position - start, Vector3.up);
+                Vector3 expected = key == Key.W ? forward : key == Key.S ? -forward : key == Key.A ? -right : right;
+                Assert.Greater(travel.magnitude, .4f);
+                Assert.Greater(Vector3.Dot(travel.normalized, expected), .98f, key + " must move relative to the view.");
+                Assert.Less(Quaternion.Angle(view, Camera.main.transform.rotation), .05f, key + " must not rotate the frame.");
+                Assert.AreEqual(37f, (float)F(camera, "arenaYaw"), .001f);
+                AssertCenteredReticle();
+                yield return new WaitForSeconds(.2f);
+            }
+        }
     }
 }

@@ -24,6 +24,7 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
         public int movingAimSamples;
         public bool groundCollisionOnly;
         public float mouseLookDegrees;
+        public float maximumKeyboardViewRotation;
     }
     readonly Report report = new Report();
     readonly List<string> failures = new List<string>();
@@ -119,6 +120,7 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
         Vector3 start = flow.transform.position;
         Vector3 previous = start;
         foreach (var direction in new[] { Key.W, Key.D, Key.S, Key.A }) {
+            Quaternion keyboardView = Camera.main.transform.rotation;
             keys = new[] { direction };
             float until = Time.time + 2;
             while (Time.time < until) {
@@ -128,11 +130,13 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
                 report.maximumAimErrorPixels = Mathf.Max(report.maximumAimErrorPixels,Vector2.Distance(new Vector2(strike.x,strike.y),center));
                 report.maximumReticleErrorPixels = Mathf.Max(report.maximumReticleErrorPixels,Vector2.Distance(ThanhGiongArenaHUD.AimScreenPoint,center));
                 report.movingAimSamples++;
+                report.maximumKeyboardViewRotation = Mathf.Max(report.maximumKeyboardViewRotation, Quaternion.Angle(keyboardView, Camera.main.transform.rotation));
             }
             report.movedMeters += Vector3.Distance(previous, flow.transform.position); previous = flow.transform.position;
         }
         Check(report.maximumAimErrorPixels < .5f && report.maximumReticleErrorPixels < .01f && report.movingAimSamples > 20, "Aim/reticle did not remain centered while moving");
         keys = Array.Empty<Key>(); Check(report.movedMeters > 2, "WASD did not move the mounted character");
+        Check(report.maximumKeyboardViewRotation < .05f, "WASD rotated the view instead of only moving the character");
         campaign.TeleportPlayer(new Vector3(0, .08f, -30)); flow.transform.rotation = Quaternion.identity;
         camera.SnapToTarget(); yield return new WaitForSeconds(.5f);
         report.boundaryDistance = Vector3.Distance(camera.transform.position, flow.transform.position + Vector3.up*camera.lookHeight);

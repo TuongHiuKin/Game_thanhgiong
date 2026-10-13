@@ -22,6 +22,7 @@ public class IsometricCameraFollow : MonoBehaviour
     public ArenaCameraMode arenaCameraMode = ArenaCameraMode.ThirdPersonFar;
     public float arenaDistance = 15.5f;
     public float arenaPitch = 28f;
+    // Absolute world yaw, controlled by the mouse; independent of horse facing.
     public float arenaYaw;
     public float arenaAimDistance = 3.4f;
     public float arenaAimHeight = 1.25f;
@@ -127,7 +128,7 @@ public class IsometricCameraFollow : MonoBehaviour
         isOverview = false;
         if (target == null) return;
         smoothLead = Vector3.zero; ApplyProjection();
-        Quaternion rotation = arenaPerspective ? Quaternion.Euler(arenaPitch, target.eulerAngles.y + arenaYaw, 0) : useOrthographicIsometric ? IsometricRotation : Quaternion.LookRotation(Vector3.up * lookHeight - offset, Vector3.up);
+        Quaternion rotation = arenaPerspective ? Quaternion.Euler(arenaPitch, arenaYaw, 0) : useOrthographicIsometric ? IsometricRotation : Quaternion.LookRotation(Vector3.up * lookHeight - offset, Vector3.up);
         smoothPosition = useOrthographicIsometric ? target.position + Vector3.up * lookHeight - rotation * Vector3.forward * cameraDistance : target.position + offset;
         if (arenaPerspective)
         {
@@ -195,15 +196,14 @@ public class IsometricCameraFollow : MonoBehaviour
             {
                 if (arenaCameraMode == ArenaCameraMode.FirstPerson)
                 {
-                    desiredRotation = Quaternion.Euler(arenaPitch, target.eulerAngles.y + arenaYaw, 0);
+                    desiredRotation = Quaternion.Euler(arenaPitch, arenaYaw, 0);
                     desiredPosition = FirstPersonEyePosition;
                 }
                 else
                 {
-                    // Orbit offset follows the rider's heading. The level is
-                    // stationary; turning the view makes it rotate on screen.
+                    // Follow position only. Horse steering must not rotate the view.
                     focus = target.position + Vector3.up * lookHeight;
-                    desiredRotation = Quaternion.Euler(arenaPitch, target.eulerAngles.y + arenaYaw, 0);
+                    desiredRotation = Quaternion.Euler(arenaPitch, arenaYaw, 0);
                     desiredPosition = ArenaThirdPersonPosition(desiredRotation);
                     Vector3 direction = desiredPosition - focus;
                     float distance = direction.magnitude;
@@ -244,11 +244,11 @@ public class IsometricCameraFollow : MonoBehaviour
         // forward strike point here would cancel mouse aiming every frame.
     }
     Vector3 FirstPersonEyePosition => target.position + Vector3.up * firstPersonEyeOffset.y
-        + target.right * firstPersonEyeOffset.x + target.forward * firstPersonEyeOffset.z;
+        + Quaternion.Euler(0, arenaYaw, 0) * new Vector3(firstPersonEyeOffset.x, 0, firstPersonEyeOffset.z);
     Vector3 ArenaThirdPersonPosition(Quaternion orbitRotation)
     {
         Vector3 direction = -(orbitRotation * Vector3.forward) * arenaDistance + (orbitRotation * Vector3.right) * arenaShoulderOffset;
-        Vector3 forward = Quaternion.Euler(0, target.eulerAngles.y + arenaYaw, 0) * Vector3.forward;
+        Vector3 forward = Quaternion.Euler(0, arenaYaw, 0) * Vector3.forward;
         Vector3 position = target.position + Vector3.up * lookHeight + forward * arenaAimDistance + direction.normalized * arenaDistance;
         position.y = Mathf.Max(position.y, target.position.y + .75f);
         return position;
