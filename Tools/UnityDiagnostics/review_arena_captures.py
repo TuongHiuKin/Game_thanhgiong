@@ -7,7 +7,9 @@ sys.path.insert(0, str(root / '.agents/skills/scenario-unity-expert/scripts'))
 import ut_review
 
 folder = root / (sys.argv[1] if len(sys.argv) > 1 else 'Artifacts/ArenaValidation/2026-10-12')
-if (folder / 'center-reticle-forward.png').exists():
+if (folder / 'center-look-left.png').exists():
+    paths = [folder / 'before-ground.png', folder / 'center-look-left.png', folder / 'center-look-right.png']
+elif (folder / 'center-reticle-forward.png').exists():
     paths = [folder / 'center-reticle-forward.png', folder / 'center-reticle-turned.png', folder / 'arena-hands-final.png']
 else:
     paths = [folder / 'editor-hud.png', folder / 'left-flank-final.png', folder / 'weapon-grip-final.png']

@@ -110,6 +110,9 @@ public class ThanhGiongArenaPlayModeTests
         ((Behaviour)enemy).enabled = false;
         Call(campaign, "TeleportPlayer", enemy.transform.position - Vector3.forward * 1.5f);
         campaign.transform.rotation = Quaternion.identity; Physics.SyncTransforms();
+        var follow = Camera.main.GetComponent(T("IsometricCameraFollow")); Call(follow, "SnapToTarget");
+        enemy.GetComponent<Rigidbody>().position = arena.transform.position + (Vector3)P(campaign, "MeleeAimDirection") * 1.5f;
+        Physics.SyncTransforms();
         Assert.IsTrue((bool)Call(campaign, "TryMeleeAttack"));
         yield return new WaitForSeconds(.35f);
         Assert.AreEqual(1, P(campaign, "Kills")); Assert.AreEqual(1, P(waves, "WaveIndex"));

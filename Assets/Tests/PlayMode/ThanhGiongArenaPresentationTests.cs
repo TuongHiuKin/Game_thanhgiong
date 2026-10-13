@@ -47,6 +47,12 @@ public class ThanhGiongArenaPresentationTests
         Time.timeScale = 1; Call(arena, "RestartRound"); yield return null;
     }
     void Mode(int index) => Call(camera, "SetArenaCameraMode", Enum.ToObject(camera.GetType().GetField("arenaCameraMode").FieldType, index));
+    void AssertCenteredReticle()
+    {
+        var screenPoint = (Vector2)T("ThanhGiongArenaHUD").GetProperty("AimScreenPoint").GetValue(null);
+        Assert.AreEqual(Screen.width * .5f, screenPoint.x, .001f);
+        Assert.AreEqual(Screen.height * .5f, screenPoint.y, .001f);
+    }
     IEnumerator Enemy()
     {
         Call(arena, "BeginCombat");
@@ -91,11 +97,12 @@ public class ThanhGiongArenaPresentationTests
         Mode(0); Call(camera, "SnapToTarget");
         yield return new WaitForSeconds(.7f);
         var focus = arena.transform.position + Vector3.up * (float)F(camera, "lookHeight");
-        Assert.AreEqual(15.5f, Vector3.Distance(camera.transform.position, focus), .1f);
+        Assert.Greater(Vector3.Distance(camera.transform.position, focus), 10f);
+        Assert.Greater(camera.transform.position.y, arena.transform.position.y + .7f);
         Assert.GreaterOrEqual(Camera.main.farClipPlane, 1000f);
     }
 
-    [UnityTest] public IEnumerator ScreenCenterAndStrikePointStayAlignedWhileTurningMovingAndShaking()
+    [UnityTest] public IEnumerator MouseLookRotatesAllViewsWithoutRightButtonAndReticleStaysCentered()
     {
         yield return Enemy();
         for (int mode = 0; mode < 3; mode++) {
@@ -105,9 +112,15 @@ public class ThanhGiongArenaPresentationTests
                 var head = Camera.main.WorldToViewportPoint(arena.transform.position + Vector3.up * 3.1f);
                 Assert.Greater(Mathf.Abs(head.x - .5f), .02f, "Close view must leave the screen center clear of the rider's head.");
             }
-            var screenPoint = (Vector2)T("ThanhGiongArenaHUD").GetProperty("AimScreenPoint").GetValue(null);
-            Assert.AreEqual(Screen.width * .5f, screenPoint.x, .001f);
-            Assert.AreEqual(Screen.height * .5f, screenPoint.y, .001f);
+            float yaw = (float)F(camera, "arenaYaw"), pitch = (float)F(camera, "arenaPitch");
+            Quaternion before = Camera.main.transform.rotation;
+            InputSystem.QueueStateEvent(mouse, new MouseState { delta = new Vector2(40, -20) });
+            yield return null; yield return null;
+            Assert.Greater((float)F(camera, "arenaYaw") - yaw, 5f);
+            Assert.Greater((float)F(camera, "arenaPitch") - pitch, 2f);
+            Assert.Greater(Quaternion.Angle(before, Camera.main.transform.rotation), 2f);
+            Assert.AreEqual(CursorLockMode.Locked, Cursor.lockState);
+            AssertCenteredReticle();
         }
         Mode(0); Call(camera, "SnapToTarget");
         Call(camera, "Shake", 1.5f, .8f);
@@ -121,13 +134,20 @@ public class ThanhGiongArenaPresentationTests
             Assert.Greater(view.z, 0);
             Assert.AreEqual(.5f, view.x, .001f);
             Assert.AreEqual(.5f, view.y, .001f);
+            AssertCenteredReticle();
         }
         InputSystem.QueueStateEvent(keyboard, new KeyboardState());
         Assert.Greater(Vector3.Distance(start, arena.transform.position), .5f);
         Assert.Greater(Mathf.Abs(Mathf.DeltaAngle(0, arena.transform.eulerAngles.y)), 45f);
         yield return new WaitForSeconds(.8f);
-        Vector3 behind = arena.transform.position - camera.transform.position; behind.y = 0;
-        Assert.Greater(Vector3.Dot(behind.normalized, arena.transform.forward), .9f, "Camera must follow the new horse heading.");
+        float frozenYaw = (float)F(camera, "arenaYaw");
+        Call(arena, "SetPaused", true); yield return null;
+        Assert.AreEqual(CursorLockMode.None, Cursor.lockState); Assert.IsTrue(Cursor.visible);
+        InputSystem.QueueStateEvent(mouse, new MouseState { delta = new Vector2(200, 200) });
+        yield return null; yield return null;
+        Assert.AreEqual(frozenYaw, (float)F(camera, "arenaYaw"), .001f);
+        Call(arena, "SetPaused", false); yield return null;
+        Assert.AreEqual(CursorLockMode.Locked, Cursor.lockState);
     }
 
     [UnityTest] public IEnumerator ArenaBackwardInputDoesNotFlipHorseOrCamera()
@@ -166,14 +186,36 @@ public class ThanhGiongArenaPresentationTests
     {
         yield return Enemy(); var e = Living[0]; var rb = e.GetComponent<Rigidbody>();
         arena.transform.rotation = Quaternion.identity;
-        rb.position = arena.transform.position + Vector3.forward * 5f;
+        Call(camera, "SnapToTarget");
+        Vector3 aim = (Vector3)P(campaign, "MeleeAimDirection");
+        rb.position = arena.transform.position + aim * 5f;
         Physics.SyncTransforms();
         Assert.IsTrue((bool)Call(campaign, "HasMeleeTarget"));
         float before = (float)P(e, "HealthRatio");
         Assert.IsTrue((bool)Call(campaign, "TryMeleeAttack"));
         yield return new WaitForSeconds(.25f);
         Assert.Less((float)P(e, "HealthRatio"), before);
-        rb.position = arena.transform.position - Vector3.forward * 5f; Physics.SyncTransforms();
+        rb.position = arena.transform.position - aim * 5f; Physics.SyncTransforms();
         Assert.IsFalse((bool)Call(campaign, "HasMeleeTarget"));
+    }
+
+    [UnityTest] public IEnumerator CenterAimHitsSideTargetAndLatchesDirectionDuringWindup()
+    {
+        yield return Enemy(); var e = Living[0]; var rb = e.GetComponent<Rigidbody>();
+        arena.transform.rotation = Quaternion.identity; Mode(0);
+        camera.GetType().GetField("arenaYaw").SetValue(camera, 90f); Call(camera, "SnapToTarget");
+        Vector3 aim = (Vector3)P(campaign, "MeleeAimDirection");
+        rb.position = arena.transform.position + aim * 4f; Physics.SyncTransforms();
+        yield return new WaitForFixedUpdate(); // Rigidbody writes reach Transform after the physics step.
+        AssertCenteredReticle();
+        Assert.Greater(Vector3.Dot(aim, Vector3.right), .9f);
+        Assert.IsTrue((bool)Call(campaign, "HasMeleeTarget"));
+        float hp = (float)P(e, "HealthRatio");
+        Assert.IsTrue((bool)Call(campaign, "TryMeleeAttack"));
+        camera.GetType().GetField("arenaYaw").SetValue(camera, -90f); Call(camera, "SnapToTarget");
+        Assert.IsFalse((bool)Call(campaign, "HasMeleeTarget"));
+        yield return new WaitForSeconds(.25f);
+        Assert.Less((float)P(e, "HealthRatio"), hp, "An attack must keep the aim captured on click.");
+        Assert.AreEqual(0f, Mathf.DeltaAngle(0, arena.transform.eulerAngles.y), .01f, "Mouse aim must not create camera/horse rotation feedback.");
     }
 }

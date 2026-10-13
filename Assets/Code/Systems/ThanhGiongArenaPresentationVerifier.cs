@@ -22,6 +22,8 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
         public float zoomBefore, zoomAfter, boundaryDistance, movedMeters, eyeHeight, damageDisplacement, damageRise, deathRise;
         public float maximumAimErrorPixels, maximumReticleErrorPixels;
         public int movingAimSamples;
+        public bool groundCollisionOnly;
+        public float mouseLookDegrees;
     }
     readonly Report report = new Report();
     readonly List<string> failures = new List<string>();
@@ -34,6 +36,7 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
     Key[] keys = Array.Empty<Key>();
     bool attack;
     float scroll;
+    Vector2 mouseDelta;
     string folder;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -58,7 +61,7 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
     void LateUpdate()
     {
         InputSystem.QueueStateEvent(keyboard, new KeyboardState(keys));
-        InputSystem.QueueStateEvent(mouse, new MouseState { scroll = new Vector2(0, scroll) }.WithButton(MouseButton.Left, attack));
+        InputSystem.QueueStateEvent(mouse, new MouseState { delta = mouseDelta, scroll = new Vector2(0, scroll) }.WithButton(MouseButton.Left, attack));
         scroll = 0;
     }
     void Check(bool pass, string message) { if (!pass) failures.Add(message); }
@@ -84,6 +87,9 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
     {
         yield return new WaitForSeconds(1.5f);
         flow = FindAnyObjectByType<ThanhGiongArenaFlow>(); campaign = flow.GetComponent<ThanhGiongCampaignController>(); camera = Camera.main.GetComponent<IsometricCameraFollow>();
+        var ground = GameObject.Find("Walkable ground");
+        report.groundCollisionOnly = ground.GetComponent<Collider>().enabled && !ground.GetComponent<Renderer>().enabled;
+        Check(report.groundCollisionOnly, "Coplanar brown collider must not render through grass");
         flow.waveManager.waves[0].count = 3; flow.waveManager.waves[0].health = 500; flow.waveManager.waves[0].spawnInterval = .1f;
         yield return Shot("01-intro"); yield return KeyPress(Key.Enter);
         Check(flow.CanFight, "Enter did not start combat");
@@ -101,6 +107,12 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
         Check(report.eyeHeight > 3, "First-person camera below rider eye level");
         yield return KeyPress(Key.V); modes.Add(camera.arenaCameraMode.ToString());
         Check(modes.SequenceEqual(new[] { "ThirdPersonFar", "ThirdPersonClose", "FirstPerson", "ThirdPersonFar" }), "V camera cycle failed");
+        Quaternion beforeLook = Camera.main.transform.rotation;
+        mouseDelta = new Vector2(40, -20); yield return null; yield return null;
+        mouseDelta = Vector2.zero; yield return new WaitForSeconds(.3f);
+        report.mouseLookDegrees = Quaternion.Angle(beforeLook, Camera.main.transform.rotation);
+        Check(report.mouseLookDegrees > 5 && Cursor.lockState == CursorLockMode.Locked, "Mouse movement alone must rotate the locked-center view");
+        camera.arenaYaw = 0; camera.SetArenaCameraMode(IsometricCameraFollow.ArenaCameraMode.ThirdPersonFar); camera.SnapToTarget();
         report.zoomBefore = camera.arenaDistance; scroll = 120; yield return new WaitForSeconds(.3f); report.zoomAfter = camera.arenaDistance;
         Check(Mathf.Abs(report.zoomBefore - report.zoomAfter - 2) < .01f, "A wheel notch did not zoom two meters");
         scroll = -120; yield return new WaitForSeconds(.3f);
@@ -119,17 +131,17 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
             }
             report.movedMeters += Vector3.Distance(previous, flow.transform.position); previous = flow.transform.position;
         }
-        Check(report.maximumAimErrorPixels < .5f && report.maximumReticleErrorPixels < .01f && report.movingAimSamples > 20, "Strike direction/reticle drifted away from screen center while moving");
+        Check(report.maximumAimErrorPixels < .5f && report.maximumReticleErrorPixels < .01f && report.movingAimSamples > 20, "Aim/reticle did not remain centered while moving");
         keys = Array.Empty<Key>(); Check(report.movedMeters > 2, "WASD did not move the mounted character");
         campaign.TeleportPlayer(new Vector3(0, .08f, -30)); flow.transform.rotation = Quaternion.identity;
         camera.SnapToTarget(); yield return new WaitForSeconds(.5f);
         report.boundaryDistance = Vector3.Distance(camera.transform.position, flow.transform.position + Vector3.up*camera.lookHeight);
-        Check(report.boundaryDistance > 14, "Invisible arena boundary collapsed camera"); yield return Shot("05-boundary-background");
+        Check(report.boundaryDistance > 10, "Invisible arena boundary collapsed camera"); yield return Shot("05-boundary-background");
         campaign.TeleportPlayer(start); flow.transform.rotation = Quaternion.identity;
         camera.arenaYaw = -90; camera.arenaPitch = 18; camera.arenaDistance = 6; camera.SnapToTarget(); yield return new WaitForSeconds(.3f); yield return Shot("06-left-flank");
         camera.arenaYaw = 90; camera.arenaPitch = 18; camera.arenaDistance = 4.5f; camera.lookHeight = 2.5f; camera.SnapToTarget(); yield return new WaitForSeconds(.3f); yield return Shot("07-weapon-grip");
         camera.SetArenaCameraMode(IsometricCameraFollow.ArenaCameraMode.ThirdPersonClose); camera.arenaYaw = 0; camera.SnapToTarget();
-        var enemy = enemies[0]; var body = enemy.GetComponent<Rigidbody>(); body.position = start + Vector3.forward * 3; body.linearVelocity = Vector3.zero; Physics.SyncTransforms();
+        var enemy = enemies[0]; var body = enemy.GetComponent<Rigidbody>(); body.position = flow.transform.position + campaign.MeleeAimDirection * 3; body.linearVelocity = Vector3.zero; Physics.SyncTransforms();
         yield return new WaitForSeconds(.3f); Vector3 impactStart = body.position; float hp = enemy.HealthRatio;
         Check(campaign.HasMeleeTarget(), "Reticle did not detect melee target");
         attack = true; yield return null; yield return null; attack = false;

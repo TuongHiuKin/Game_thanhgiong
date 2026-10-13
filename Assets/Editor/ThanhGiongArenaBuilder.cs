@@ -37,7 +37,10 @@ public static class ThanhGiongArenaBuilder
         Box("Grass plain", environment, new Vector3(0, -.6f, 0), new Vector3(160, 1, 160), grass);
         var field = Primitive("Central battlefield", PrimitiveType.Cylinder, environment, new Vector3(0, -.12f, 0), new Vector3(52, .04f, 52), dirt);
         field.GetComponent<Collider>().enabled = false;
-        Box("Walkable ground", environment, new Vector3(0, -.15f, 0), new Vector3(65, .1f, 65), dirt);
+        // Collision only: its top is coplanar with the grass. Rendering both
+        // surfaces caused the brown square to flicker through the grass.
+        var ground = Box("Walkable ground", environment, new Vector3(0, -.15f, 0), new Vector3(65, .1f, 65), dirt);
+        ground.GetComponent<Renderer>().enabled = false;
         for (int i = 0; i < 4; i++)
         {
             bool x = i < 2;

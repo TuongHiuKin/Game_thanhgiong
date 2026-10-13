@@ -1,0 +1,24 @@
+{
+    "verdict": "PASS",
+    "runtimeErrors": 0,
+    "failures": [],
+    "cameraModes": [
+        "ThirdPersonFar",
+        "ThirdPersonClose",
+        "FirstPerson",
+        "ThirdPersonFar"
+    ],
+    "zoomBefore": 15.5,
+    "zoomAfter": 13.5,
+    "boundaryDistance": 12.614535331726074,
+    "movedMeters": 20.545120239257813,
+    "eyeHeight": 3.250030040740967,
+    "damageDisplacement": 0.11770114302635193,
+    "damageRise": 0.0000011920928955078125,
+    "deathRise": 0.0,
+    "maximumAimErrorPixels": 0.00013647876039613038,
+    "maximumReticleErrorPixels": 0.0,
+    "movingAimSamples": 15381,
+    "groundCollisionOnly": true,
+    "mouseLookDegrees": 30.303571701049805
+}

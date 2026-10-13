@@ -7,6 +7,13 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
     GUIStyle title, text, small, button;
 
     void Awake() { if (arena != null) campaign = arena.GetComponent<ThanhGiongCampaignController>(); }
+    void Update()
+    {
+        bool look = arena != null && arena.MouseLookActive && campaign != null && !campaign.IsDead;
+        Cursor.lockState = look ? CursorLockMode.Locked : CursorLockMode.None;
+        Cursor.visible = !look;
+    }
+    void OnDisable() { Cursor.lockState = CursorLockMode.None; Cursor.visible = true; }
     void OnGUI()
     {
         if (arena == null || campaign == null) return;
@@ -35,7 +42,7 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
             GUI.Label(new Rect(435, 96, 800, 30), $"Đợt {wave.WaveIndex + 1}/3   ·   Đã xuất hiện {wave.Spawned}/{wave.waves[wave.WaveIndex].count}   ·   Còn {wave.AliveCount} giặc", small);
         }
         Panel(new Rect(60, 664, 1160, 38));
-        GUI.Label(new Rect(70, 666, 1140, 32), "W/S: tiến/lùi   A/D: đổi hướng   Shift: chạy   Chuột trái: đánh   C: né   E: nhổ tre   V: góc nhìn   Cuộn chuột: zoom   Chuột phải: xoay   Esc: dừng", instruction);
+        GUI.Label(new Rect(70, 666, 1140, 32), "W/S: tiến/lùi   A/D: đổi hướng   Shift: chạy   Chuột: xoay nhìn · trái: đánh   C: né   E: nhổ tre   V: góc nhìn   Cuộn: zoom   Esc: dừng", instruction);
         if (arena.CurrentStage == ThanhGiongArenaFlow.Stage.SeekingBamboo && !arena.NearBamboo)
         {
             Vector3 p = Camera.main != null ? Camera.main.WorldToScreenPoint(arena.bamboo.transform.position + Vector3.up * 4) : Vector3.zero;
