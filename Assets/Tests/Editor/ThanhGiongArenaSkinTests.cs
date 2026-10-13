@@ -31,7 +31,15 @@ public class ThanhGiongArenaSkinTests
             Assert.Greater(vertices.Length, 10, "Hand landmark must be a substantial connected component.");
             Assert.IsTrue(vertices.All(kept.Contains), "Right gauntlet/fingers were cut with the old spear: " + landmark);
         }
-        foreach (int landmark in new[] { 2564, 133, 1465, 1607, 1693, 1752, 1817, 1896, 2041, 27028, 27108, 6850 }) {
+        // Landmark 2564 joins the palm to the old lower shaft. They cannot be
+        // removed as one component; verify the visible palm and lower shaft separately.
+        int palmRoot = Find(2564);
+        int[] palm = Enumerable.Range(0, source.vertexCount).Where(i => Find(i) == palmRoot && kept.Contains(i)).ToArray();
+        Assert.GreaterOrEqual(palm.Length, 200, "The palm must include its surface, not just the detached finger groups.");
+        Assert.IsTrue(kept.Contains(2042), "The visible palm face was removed along with the lower spear shaft.");
+        Assert.IsFalse(Enumerable.Range(0, source.vertexCount).Any(i => Find(i) == palmRoot && source.vertices[i].y < 1.10f && kept.Contains(i)), "Lower old shaft survived beneath the hand.");
+        Assert.IsFalse(Enumerable.Range(0, source.vertexCount).Any(i => Find(i) == Find(2041) && source.vertices[i].y > 1.235f && kept.Contains(i)), "Upper old shaft survived above the hand.");
+        foreach (int landmark in new[] { 133, 1465, 1607, 1693, 1752, 1817, 1896, 27028, 27108, 6850 }) {
             int root = Find(landmark);
             Assert.IsFalse(Enumerable.Range(0, source.vertexCount).Any(i => Find(i) == root && kept.Contains(i)), "Unwanted spear/left fragment survived: " + landmark);
         }

@@ -207,11 +207,7 @@ public static class ThanhGiongArenaBuilder
                     float minX = pts.Min(p => p.x), maxX = pts.Max(p => p.x);
                     float minY = pts.Min(p => p.y), maxY = pts.Max(p => p.y);
                     float minZ = pts.Min(p => p.z), maxZ = pts.Max(p => p.z);
-                    // The closed fist occupies the same X/Z corridor as the
-                    // old spear shaft. Keep the palm/fingers around Y=1.2;
-                    // the ornaments higher up belong to the old spear.
-                    bool isGrip = minY >= 1.13f && maxY <= 1.235f;
-                    bool isSpear = !isGrip && minX > 0.18f && maxX < 0.46f && minZ > -0.19f && maxZ < 0.10f && maxY > 0.50f;
+                    bool isSpear = minX > 0.18f && maxX < 0.46f && minZ > -0.19f && maxZ < 0.10f && maxY > 0.50f;
                     bool isFloatingLeftLeg = maxX < -0.15f && minX > -0.40f && minY >= 0.25f && maxY <= 0.50f && minZ >= -0.30f && maxZ <= 0.05f;
                     return isSpear || isFloatingLeftLeg;
                 });
@@ -226,7 +222,14 @@ public static class ThanhGiongArenaBuilder
             for (int i = 0; i < tris.Length; i += 3)
             {
                 int root = Find(tris[i]);
-                if (!isCullGroup[root])
+                // The palm is connected to the lower spear shaft in the OBJ.
+                // Protect individual grip triangles, not just whole components:
+                // culling that component was leaving only detached fingertips.
+                bool gripTriangle = Enumerable.Range(0, 3).All(k => {
+                    Vector3 p = vertices[tris[i + k]];
+                    return p.x > .17f && p.x < .46f && p.y >= 1.10f && p.y <= 1.235f && p.z > -.19f && p.z < .10f;
+                });
+                if (!isCullGroup[root] || gripTriangle)
                 {
                     kept.Add(tris[i]);
                     kept.Add(tris[i + 1]);
@@ -246,6 +249,10 @@ public static class ThanhGiongArenaBuilder
         else
         {
             EditorUtility.CopySerialized(newMesh, stored);
+            // CopySerialized updates CPU data, but an already rendered mesh
+            // can retain its old GPU index buffer. SetTriangles invalidates it.
+            for (int s = 0; s < newMesh.subMeshCount; s++)
+                stored.SetTriangles(newMesh.GetTriangles(s), s);
             EditorUtility.SetDirty(stored);
             UnityEngine.Object.DestroyImmediate(newMesh);
         }

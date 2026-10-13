@@ -2,6 +2,8 @@
 
 > **Đã tiếp quản và kiểm chứng ngày 12/10/2026:** xem [báo cáo hoàn tất](CODEX_ARENA_VERIFICATION_2026-10-12.md). Scene/skin đã dựng lại, đấu trường đạt 19/19 test và bản Windows đạt kiểm chứng runtime. Các thông số góc vũ khí và camera bên dưới là trạng thái bàn giao; báo cáo mới ghi các hiệu chỉnh cuối, gồm khôi phục nắm tay bị bộ lọc giáo xóa nhầm. Toàn suite game còn 3 lỗi campaign cũ được liệt kê riêng trong báo cáo.
 
+> **Cập nhật 13/10/2026:** [tâm đánh cố định, camera bám hướng ngựa và khôi phục lòng bàn tay](CODEX_CENTER_AIM_HAND_FIX_2026-10-13.md). Kiểm tra bổ sung phát hiện lòng bàn tay nối chung với cán giáo vẫn bị xóa ở bản 12/10; bản mới khôi phục phần này và đạt 21/21 test đấu trường.
+
 **Dự án:** Thánh Gióng - Phù Đổng Arena (`Game_thanhgiong`)  
 **Nhánh Git:** `feature/mounted-horse-motion`  
 **Môi trường:** Unity 6 (`6000.6.0f1`), Universal Render Pipeline (URP), Windows Standalone x64  

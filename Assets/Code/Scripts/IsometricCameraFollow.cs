@@ -23,6 +23,12 @@ public class IsometricCameraFollow : MonoBehaviour
     public float arenaDistance = 15.5f;
     public float arenaPitch = 28f;
     public float arenaYaw;
+    public float arenaAimDistance = 3.4f;
+    public float arenaAimHeight = 1.25f;
+    public float arenaShoulderOffset = 3f;
+    public Vector3 ArenaAimPoint => target != null
+        ? target.position + Vector3.up * arenaAimHeight + target.forward * arenaAimDistance
+        : transform.position + transform.forward;
     public Vector3 firstPersonEyeOffset = new Vector3(0f, 3.25f, .65f);
     public float arenaZoomPerNotch = 2f;
     public float isometricPitch = 35.26439f;
@@ -115,14 +121,17 @@ public class IsometricCameraFollow : MonoBehaviour
         isOverview = false;
         if (target == null) return;
         smoothLead = Vector3.zero; ApplyProjection();
-        Quaternion rotation = arenaPerspective ? (arenaCameraMode == ArenaCameraMode.FirstPerson ? Quaternion.Euler(arenaPitch, target.eulerAngles.y + arenaYaw, 0) : Quaternion.Euler(arenaPitch, arenaYaw, 0)) : useOrthographicIsometric ? IsometricRotation : Quaternion.LookRotation(Vector3.up * lookHeight - offset, Vector3.up);
+        Quaternion rotation = arenaPerspective ? Quaternion.Euler(arenaPitch, target.eulerAngles.y + arenaYaw, 0) : useOrthographicIsometric ? IsometricRotation : Quaternion.LookRotation(Vector3.up * lookHeight - offset, Vector3.up);
         smoothPosition = useOrthographicIsometric ? target.position + Vector3.up * lookHeight - rotation * Vector3.forward * cameraDistance : target.position + offset;
         if (arenaPerspective)
         {
             if (arenaCameraMode == ArenaCameraMode.FirstPerson)
                 smoothPosition = FirstPersonEyePosition;
             else
-                smoothPosition = target.position + Vector3.up * lookHeight - rotation * Vector3.forward * arenaDistance;
+            {
+                smoothPosition = ArenaThirdPersonPosition(rotation);
+                rotation = Quaternion.LookRotation(ArenaAimPoint - smoothPosition, Vector3.up);
+            }
         }
         transform.SetPositionAndRotation(smoothPosition, rotation);
         if (view != null) view.orthographicSize = Mathf.Max(1f, ShotSize);
@@ -191,8 +200,11 @@ public class IsometricCameraFollow : MonoBehaviour
                 }
                 else
                 {
-                    desiredRotation = Quaternion.Euler(arenaPitch, arenaYaw, 0);
-                    desiredPosition = focus - desiredRotation * Vector3.forward * arenaDistance;
+                    // Orbit offset follows the rider's heading. The level is
+                    // stationary; turning the view makes it rotate on screen.
+                    focus = target.position + Vector3.up * lookHeight;
+                    desiredRotation = Quaternion.Euler(arenaPitch, target.eulerAngles.y + arenaYaw, 0);
+                    desiredPosition = ArenaThirdPersonPosition(desiredRotation);
                     Vector3 direction = desiredPosition - focus;
                     float distance = direction.magnitude;
                     foreach (RaycastHit hit in Physics.SphereCastAll(focus, .3f, direction.normalized, distance, ~0, QueryTriggerInteraction.Ignore))
@@ -209,6 +221,7 @@ public class IsometricCameraFollow : MonoBehaviour
                         distance = Mathf.Min(distance, Mathf.Max(2.5f, hit.distance - .25f));
                     }
                     desiredPosition = focus + direction.normalized * distance;
+                    desiredRotation = Quaternion.LookRotation(ArenaAimPoint - desiredPosition, Vector3.up);
                 }
             }
         }
@@ -216,7 +229,7 @@ public class IsometricCameraFollow : MonoBehaviour
         float blendSpeed = arenaPerspective && arenaCameraMode == ArenaCameraMode.FirstPerson ? 24f : followSmoothness;
         float blend = 1f - Mathf.Exp(-blendSpeed * (isOverview ? .5f : 1f) * dt);
         smoothPosition = Vector3.Lerp(smoothPosition, desiredPosition, blend);
-        // Fixed axes never yaw with the horse or drift after a shake.
+        // Campaign isometric views retain their fixed axes.
         transform.rotation = useOrthographicIsometric ? desiredRotation : Quaternion.Slerp(transform.rotation, desiredRotation, blend);
         if (view != null) view.orthographicSize = Mathf.Lerp(view.orthographicSize, Mathf.Max(1f, size), 1f - Mathf.Exp(-zoomSmoothness * dt));
         Vector3 shake = Vector3.zero;
@@ -228,7 +241,16 @@ public class IsometricCameraFollow : MonoBehaviour
             shakeIntensity = Mathf.MoveTowards(shakeIntensity, 0f, dt * 3.5f);
         }
         transform.position = smoothPosition + shake;
+        // Aim after smoothing and shake so the actual strike direction remains
+        // at the fixed reticle even while the horse turns or the camera catches up.
+        if (arenaPerspective && !isOverview && arenaCameraMode != ArenaCameraMode.FirstPerson)
+            transform.rotation = Quaternion.LookRotation(ArenaAimPoint - transform.position, Vector3.up);
     }
     Vector3 FirstPersonEyePosition => target.position + Vector3.up * firstPersonEyeOffset.y
         + target.right * firstPersonEyeOffset.x + target.forward * firstPersonEyeOffset.z;
+    Vector3 ArenaThirdPersonPosition(Quaternion orbitRotation)
+    {
+        Vector3 direction = -(orbitRotation * Vector3.forward) * arenaDistance + target.right * arenaShoulderOffset;
+        return target.position + Vector3.up * lookHeight + direction.normalized * arenaDistance;
+    }
 }

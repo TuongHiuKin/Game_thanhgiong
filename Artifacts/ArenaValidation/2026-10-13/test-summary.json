@@ -1,0 +1,47 @@
+{
+  "standaloneRuntime": {
+    "verdict": "PASS",
+    "runtimeErrors": 0,
+    "failures": [],
+    "cameraModes": [
+      "ThirdPersonFar",
+      "ThirdPersonClose",
+      "FirstPerson",
+      "ThirdPersonFar"
+    ],
+    "zoomBefore": 15.5,
+    "zoomAfter": 13.5,
+    "boundaryDistance": 15.501630783081055,
+    "movedMeters": 20.70950698852539,
+    "eyeHeight": 3.250030517578125,
+    "damageDisplacement": 0.20665836334228516,
+    "damageRise": 8.940696716308594E-07,
+    "deathRise": 3.5762786865234375E-07,
+    "maximumAimErrorPixels": 0.00020471813331823796,
+    "maximumReticleErrorPixels": 0.0,
+    "movingAimSamples": 13302
+  },
+  "arena": {
+    "total": 21,
+    "editor": 6,
+    "passed": 21,
+    "playmode": 15
+  },
+  "legacyEditorFailures": [
+    {
+      "FullName": "ThanhGiongProjectTests.BattleMaps_HaveInvadersAndRequiredBosses",
+      "Message": "  Expected: greater than or equal to 20\r\n  But was:  0\r\n"
+    },
+    {
+      "FullName": "ThanhGiongProjectTests.WorldMaps_HavePlayerCampaignCameraAndFourLegRig",
+      "Message": "  LangGiongTienTuyen thiếu campaign\r\n  Expected: greater than or equal to 1\r\n  But was:  0\r\n"
+    }
+  ],
+  "editorGameAssembly": {
+    "Total": 11,
+    "Passed": 9,
+    "Failed": 2,
+    "Skipped": 0,
+    "Inconclusive": 0
+  }
+}

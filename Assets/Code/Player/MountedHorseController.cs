@@ -10,6 +10,7 @@ public class MountedHorseController : MonoBehaviour
     public float walkSpeed = 4.8f;
     public float runSpeed = 8.5f;
     public float turnSpeed = 10f;
+    public float arenaTurnDegreesPerSecond = 120f;
     public float gravity = -24f;
     public float jumpHeight = 2.4f;
     public float coyoteTime = 0.12f;
@@ -184,7 +185,12 @@ public class MountedHorseController : MonoBehaviour
         bool equipmentBusy = godotMotion != null && godotMotion.IsBusy;
         bool arenaMode = campaignController != null && campaignController.IsArena;
         Vector2 input = equipmentBusy ? Vector2.zero : arenaMode ? ThanhGiongArenaInput.Move : new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-        Vector3 move = CameraRelativeDirection(input);
+        // A following camera and camera-relative steering otherwise feed each
+        // other: holding A/D turns the camera, which turns the next move again.
+        // Arena steering is relative to the horse; campaign movement stays as before.
+        if (arenaMode && !equipmentBusy)
+            transform.Rotate(0f, input.x * arenaTurnDegreesPerSecond * Time.deltaTime, 0f, Space.World);
+        Vector3 move = arenaMode ? transform.forward * input.y : CameraRelativeDirection(input);
         if (move.sqrMagnitude > .01f) { recentDirection = move; recentDirectionTime = Time.time; }
         if (arenaMode ? ThanhGiongArenaInput.Down(KeyCode.C) || ThanhGiongArenaInput.Down(KeyCode.LeftAlt) || ThanhGiongArenaInput.Down(KeyCode.LeftControl) : Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.LeftAlt) || Input.GetKeyDown(KeyCode.LeftControl)) TryDodge(move);
         if (!equipmentBusy && campaignController == null && Input.GetMouseButtonDown(0))
@@ -207,7 +213,7 @@ public class MountedHorseController : MonoBehaviour
         }
         else planarVelocity = Vector3.SmoothDamp(planarVelocity, desiredPlanarVelocity, ref planarVelocityDamp, smoothing, 35f, Time.deltaTime);
 
-        if (!dodgeFrame && planarVelocity.sqrMagnitude > 0.025f)
+        if (!arenaMode && !dodgeFrame && planarVelocity.sqrMagnitude > 0.025f)
         {
             Quaternion target = Quaternion.LookRotation(planarVelocity.normalized, Vector3.up);
             transform.rotation = Quaternion.Slerp(transform.rotation, target, 1f - Mathf.Exp(-turnSpeed * Time.deltaTime));

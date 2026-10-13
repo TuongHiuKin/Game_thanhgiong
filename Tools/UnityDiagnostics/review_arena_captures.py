@@ -6,8 +6,11 @@ root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(root / '.agents/skills/scenario-unity-expert/scripts'))
 import ut_review
 
-folder = root / 'Artifacts/ArenaValidation/2026-10-12'
-paths = [folder / 'editor-hud.png', folder / 'left-flank-final.png', folder / 'weapon-grip-final.png']
+folder = root / (sys.argv[1] if len(sys.argv) > 1 else 'Artifacts/ArenaValidation/2026-10-12')
+if (folder / 'center-reticle-forward.png').exists():
+    paths = [folder / 'center-reticle-forward.png', folder / 'center-reticle-turned.png', folder / 'arena-hands-final.png']
+else:
+    paths = [folder / 'editor-hud.png', folder / 'left-flank-final.png', folder / 'weapon-grip-final.png']
 paths += sorted((folder / 'player').glob('*.png'))
 checks = []
 for path in paths:
@@ -18,8 +21,8 @@ ut_review.contact_sheet([str(p) for p in paths], str(folder / 'contact-sheet.png
 print(json.dumps([{'file': c['file'], 'verdict': c['verdict']} for c in checks], indent=2))
 try:
     from PIL import Image
-    im = Image.open(folder / 'editor-hud.png').convert('RGB')
-    print('Reticle center:', im.getpixel((640, 283)))
-    print('Reticle ticks:', [im.getpixel(p) for p in [(640,271),(640,296),(627,283),(653,283)]])
+    im = Image.open(paths[0]).convert('RGB')
+    center = (640, 360) if paths[0].name.startswith('center-reticle') else (640, 283)
+    print('Reticle center:', im.getpixel(center))
 except ImportError:
     pass

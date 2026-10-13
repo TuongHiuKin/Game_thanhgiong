@@ -35,7 +35,7 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
             GUI.Label(new Rect(435, 96, 800, 30), $"Đợt {wave.WaveIndex + 1}/3   ·   Đã xuất hiện {wave.Spawned}/{wave.waves[wave.WaveIndex].count}   ·   Còn {wave.AliveCount} giặc", small);
         }
         Panel(new Rect(60, 664, 1160, 38));
-        GUI.Label(new Rect(70, 666, 1140, 32), "WASD: đi   Shift: chạy   Chuột trái: đánh   C: né   E: nhổ tre   V: đổi góc nhìn (Thứ 1/Thứ 3)   Cuộn chuột: zoom   Chuột phải: xoay   Esc: tạm dừng", instruction);
+        GUI.Label(new Rect(70, 666, 1140, 32), "W/S: tiến/lùi   A/D: đổi hướng   Shift: chạy   Chuột trái: đánh   C: né   E: nhổ tre   V: góc nhìn   Cuộn chuột: zoom   Chuột phải: xoay   Esc: dừng", instruction);
         if (arena.CurrentStage == ThanhGiongArenaFlow.Stage.SeekingBamboo && !arena.NearBamboo)
         {
             Vector3 p = Camera.main != null ? Camera.main.WorldToScreenPoint(arena.bamboo.transform.position + Vector3.up * 4) : Vector3.zero;
@@ -106,20 +106,7 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
         Camera cam = Camera.main;
         if (cam == null) return;
 
-        bool isFirstPerson = IsometricCameraFollow.Instance != null && IsometricCameraFollow.Instance.arenaCameraMode == IsometricCameraFollow.ArenaCameraMode.FirstPerson;
-        Vector2 screenPoint;
-
-        if (isFirstPerson)
-        {
-            screenPoint = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-        }
-        else
-        {
-            Vector3 aimWorld = arena.transform.position + Vector3.up * 1.25f + arena.transform.forward * 3.4f;
-            Vector3 sp = cam.WorldToScreenPoint(aimWorld);
-            if (sp.z <= 0.2f) return;
-            screenPoint = new Vector2(sp.x, Screen.height - sp.y);
-        }
+        Vector2 screenPoint = AimScreenPoint;
 
         bool hasTarget = campaign.HasMeleeTarget();
 
@@ -137,6 +124,7 @@ public sealed class ThanhGiongArenaHUD : MonoBehaviour
         Fill(new Rect(screenPoint.x - spread - tickLen, screenPoint.y - tickThick * 0.5f, tickLen, tickThick), reticleColor);
         Fill(new Rect(screenPoint.x + spread, screenPoint.y - tickThick * 0.5f, tickLen, tickThick), reticleColor);
     }
+    public static Vector2 AimScreenPoint => new Vector2(Screen.width * .5f, Screen.height * .5f);
     static void Panel(Rect rect) => Fill(rect, new Color(.025f, .09f, .075f, .91f));
     static void Fill(Rect rect, Color color) { Color old = GUI.color; GUI.color = color; GUI.DrawTexture(rect, Texture2D.whiteTexture); GUI.color = old; }
 }

@@ -20,6 +20,8 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
         public int runtimeErrors;
         public string[] failures, cameraModes;
         public float zoomBefore, zoomAfter, boundaryDistance, movedMeters, eyeHeight, damageDisplacement, damageRise, deathRise;
+        public float maximumAimErrorPixels, maximumReticleErrorPixels;
+        public int movingAimSamples;
     }
     readonly Report report = new Report();
     readonly List<string> failures = new List<string>();
@@ -105,9 +107,19 @@ public sealed class ThanhGiongArenaPresentationVerifier : MonoBehaviour
         Vector3 start = flow.transform.position;
         Vector3 previous = start;
         foreach (var direction in new[] { Key.W, Key.D, Key.S, Key.A }) {
-            keys = new[] { direction }; yield return new WaitForSeconds(2);
+            keys = new[] { direction };
+            float until = Time.time + 2;
+            while (Time.time < until) {
+                yield return new WaitForEndOfFrame();
+                var strike = Camera.main.WorldToScreenPoint(camera.ArenaAimPoint);
+                var center = new Vector2(Screen.width*.5f,Screen.height*.5f);
+                report.maximumAimErrorPixels = Mathf.Max(report.maximumAimErrorPixels,Vector2.Distance(new Vector2(strike.x,strike.y),center));
+                report.maximumReticleErrorPixels = Mathf.Max(report.maximumReticleErrorPixels,Vector2.Distance(ThanhGiongArenaHUD.AimScreenPoint,center));
+                report.movingAimSamples++;
+            }
             report.movedMeters += Vector3.Distance(previous, flow.transform.position); previous = flow.transform.position;
         }
+        Check(report.maximumAimErrorPixels < .5f && report.maximumReticleErrorPixels < .01f && report.movingAimSamples > 20, "Strike direction/reticle drifted away from screen center while moving");
         keys = Array.Empty<Key>(); Check(report.movedMeters > 2, "WASD did not move the mounted character");
         campaign.TeleportPlayer(new Vector3(0, .08f, -30)); flow.transform.rotation = Quaternion.identity;
         camera.SnapToTarget(); yield return new WaitForSeconds(.5f);

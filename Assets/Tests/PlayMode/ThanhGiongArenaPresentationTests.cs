@@ -95,6 +95,57 @@ public class ThanhGiongArenaPresentationTests
         Assert.GreaterOrEqual(Camera.main.farClipPlane, 1000f);
     }
 
+    [UnityTest] public IEnumerator ScreenCenterAndStrikePointStayAlignedWhileTurningMovingAndShaking()
+    {
+        yield return Enemy();
+        for (int mode = 0; mode < 3; mode++) {
+            Mode(mode);
+            Call(camera, "SnapToTarget");
+            if (mode == 1) {
+                var head = Camera.main.WorldToViewportPoint(arena.transform.position + Vector3.up * 3.1f);
+                Assert.Greater(Mathf.Abs(head.x - .5f), .02f, "Close view must leave the screen center clear of the rider's head.");
+            }
+            var screenPoint = (Vector2)T("ThanhGiongArenaHUD").GetProperty("AimScreenPoint").GetValue(null);
+            Assert.AreEqual(Screen.width * .5f, screenPoint.x, .001f);
+            Assert.AreEqual(Screen.height * .5f, screenPoint.y, .001f);
+        }
+        Mode(0); Call(camera, "SnapToTarget");
+        Call(camera, "Shake", 1.5f, .8f);
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.W, Key.D));
+        float until = Time.time + .8f;
+        Vector3 start = arena.transform.position;
+        while (Time.time < until) {
+            yield return new WaitForEndOfFrame();
+            Vector3 strike = (Vector3)P(camera, "ArenaAimPoint");
+            var view = Camera.main.WorldToViewportPoint(strike);
+            Assert.Greater(view.z, 0);
+            Assert.AreEqual(.5f, view.x, .001f);
+            Assert.AreEqual(.5f, view.y, .001f);
+        }
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+        Assert.Greater(Vector3.Distance(start, arena.transform.position), .5f);
+        Assert.Greater(Mathf.Abs(Mathf.DeltaAngle(0, arena.transform.eulerAngles.y)), 45f);
+        yield return new WaitForSeconds(.8f);
+        Vector3 behind = arena.transform.position - camera.transform.position; behind.y = 0;
+        Assert.Greater(Vector3.Dot(behind.normalized, arena.transform.forward), .9f, "Camera must follow the new horse heading.");
+    }
+
+    [UnityTest] public IEnumerator ArenaBackwardInputDoesNotFlipHorseOrCamera()
+    {
+        yield return Enemy();
+        arena.transform.rotation = Quaternion.Euler(0, 90, 0);
+        Call(camera, "SnapToTarget");
+        Vector3 start = arena.transform.position;
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState(Key.S));
+        yield return new WaitForSeconds(.5f);
+        InputSystem.QueueStateEvent(keyboard, new KeyboardState());
+        Assert.AreEqual(90f, arena.transform.eulerAngles.y, .5f);
+        Assert.Less(arena.transform.position.x, start.x - .5f);
+        yield return new WaitForEndOfFrame(); // Camera follows in LateUpdate, after the movement step.
+        var view = Camera.main.WorldToViewportPoint((Vector3)P(camera, "ArenaAimPoint"));
+        Assert.AreEqual(.5f, view.x, .001f); Assert.AreEqual(.5f, view.y, .001f);
+    }
+
     [UnityTest] public IEnumerator DamageAndDeathPushEnemyAlongGround()
     {
         yield return Enemy(); var e = Living[0]; var rb = e.GetComponent<Rigidbody>();
