@@ -12,23 +12,26 @@ public static class ArenaMouseOnlyReview
     public static string Prepare()
     {
         EditorWindow.GetWindow(typeof(EditorWindow).Assembly.GetType("UnityEditor.GameView")).Focus();
-        Application.runInBackground = true;
-        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
-        InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
-        var keyboard=InputSystem.AddDevice<Keyboard>("Mouse only review keyboard"); keyboard.MakeCurrent();
-        var mouse=InputSystem.AddDevice<Mouse>("Mouse only review mouse"); mouse.MakeCurrent();
+        ArenaReviewInputScope.Begin();
+        var keyboard=ArenaReviewInputScope.Add<Keyboard>("Mouse only review keyboard");
+        var mouse=ArenaReviewInputScope.Add<Mouse>("Mouse only review mouse");
         SessionState.SetInt("ArenaMouseOnlyKeyboard",keyboard.deviceId);
         SessionState.SetInt("ArenaMouseOnlyMouse",mouse.deviceId);
         var flow = Object.FindAnyObjectByType<ThanhGiongArenaFlow>();
         flow.waveManager.waves[0].count=1; flow.waveManager.waves[0].health=500; flow.BeginCombat();
-        EditorApplication.update += () => { if(flow != null && Application.isPlaying) foreach(var e in flow.waveManager.LivingEnemies) e.enabled=false; };
+        EditorApplication.CallbackFunction freeze = () => { if(flow != null && Application.isPlaying) foreach(var e in flow.waveManager.LivingEnemies) e.enabled=false; };
+        EditorApplication.update += freeze;
+        ArenaReviewInputScope.OnCleanup(() => {
+            EditorApplication.update -= freeze;
+            if(flow != null) foreach(var e in flow.waveManager.LivingEnemies) e.enabled=true;
+        });
         return "Runtime review ready";
     }
     public static string Start()
     {
         var mouse=(Mouse)InputSystem.GetDeviceById(SessionState.GetInt("ArenaMouseOnlyMouse",-1));
         // Isolate scripted review input from physical mouse activity/lock warps.
-        foreach(var device in InputSystem.devices.OfType<Mouse>().Where(d=>d != mouse).ToArray()) InputSystem.DisableDevice(device);
+        ArenaReviewInputScope.IsolateMouse(mouse);
         mouse.MakeCurrent(); InputSystem.QueueStateEvent(mouse,new MouseState());
         var follow = Camera.main.GetComponent<IsometricCameraFollow>();
         follow.SetArenaCameraMode(IsometricCameraFollow.ArenaCameraMode.ThirdPersonClose); follow.arenaYaw=37; follow.SnapToTarget();

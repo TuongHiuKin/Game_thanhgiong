@@ -39,18 +39,21 @@ public static class ArenaMouseGroundReview
     }
     public static string Prepare()
     {
-        Application.runInBackground = true;
-        InputSystem.settings.backgroundBehavior = InputSettings.BackgroundBehavior.IgnoreFocus;
-        InputSystem.settings.editorInputBehaviorInPlayMode = InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
+        ArenaReviewInputScope.Begin();
         var flow = Object.FindAnyObjectByType<ThanhGiongArenaFlow>();
         flow.waveManager.waves[0].count = 3; flow.waveManager.waves[0].health = 500; flow.waveManager.waves[0].spawnInterval = .1f;
         flow.BeginCombat();
         flow.GetComponent<MountedHorseController>().enabled = true;
-        UnityEditor.EditorApplication.update += () => {
+        UnityEditor.EditorApplication.CallbackFunction freeze = () => {
             if (flow != null && Application.isPlaying)
                 foreach (var enemy in flow.waveManager.LivingEnemies) enemy.enabled = false;
         };
-        var mouse = InputSystem.AddDevice<Mouse>("Mouse aim review"); mouse.MakeCurrent();
+        UnityEditor.EditorApplication.update += freeze;
+        ArenaReviewInputScope.OnCleanup(() => {
+            UnityEditor.EditorApplication.update -= freeze;
+            if(flow != null) foreach(var enemy in flow.waveManager.LivingEnemies) enemy.enabled=true;
+        });
+        var mouse = ArenaReviewInputScope.Add<Mouse>("Mouse aim review");
         return AuditGround();
     }
     public static string Left()

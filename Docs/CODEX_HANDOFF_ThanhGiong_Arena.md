@@ -1,5 +1,7 @@
 # Handoff Document & Prompt cho OpenAI Codex / Coding Agent
 
+> **Sửa input Editor 13/10/2026:** [khôi phục chuột/bàn phím thật và dọn thiết bị kiểm tra khi thoát Play Mode](CODEX_INPUT_RECOVERY_2026-10-13.md). Không dựa vào domain reload để dọn thiết bị giả.
+
 > **Bổ sung mới nhất 13/10/2026:** [chỉ chuột điều khiển góc nhìn, WASD di chuyển theo camera](CODEX_MOUSE_ONLY_VIEW_2026-10-13.md). Camera đã tách hoàn toàn khỏi góc quay ngựa.
 
 > **Yêu cầu cuối cùng 13/10/2026:** [tâm cố định, chuột xoay góc nhìn kiểu PUBG và sửa nền đất nâu nhấp nháy](CODEX_CENTER_MOUSE_LOOK_GROUND_FIX_2026-10-13.md). Di chuột xoay camera không cần giữ nút; tâm luôn giữa màn hình.
